@@ -35,46 +35,6 @@ import handlers.users.user_handlers
 import handlers.users.admin_panel
 
 
-def run_migrations():
-    """
-    Database migratsiyalarni ishga tushirish
-    Yangi ustunlar qo'shish (agar mavjud bo'lmasa)
-    """
-    logger.info("🔄 Database migratsiyalar tekshirilmoqda...")
-
-    migrations = [
-        # free_presentations ustuni
-        {
-            'name': 'free_presentations',
-            'table': 'Users',
-            'sql': 'ALTER TABLE Users ADD COLUMN free_presentations INTEGER DEFAULT 0'
-        },
-        # Kelajakda boshqa migratsiyalar qo'shish mumkin
-        # {
-        #     'name': 'new_column',
-        #     'table': 'Users',
-        #     'sql': 'ALTER TABLE Users ADD COLUMN new_column TEXT'
-        # },
-    ]
-
-    for migration in migrations:
-        try:
-            # Ustun mavjudligini tekshirish
-            check_sql = f"PRAGMA table_info({migration['table']})"
-            columns = user_db.execute(check_sql, fetchall=True)
-            column_names = [col[1] for col in columns]
-
-            if migration['name'] not in column_names:
-                # Ustun yo'q - qo'shish
-                user_db.execute(migration['sql'], commit=True)
-                logger.info(f"✅ Migration qo'shildi: {migration['name']}")
-            else:
-                logger.info(f"ℹ️ Migration mavjud: {migration['name']}")
-
-        except Exception as e:
-            logger.error(f"❌ Migration xato ({migration['name']}): {e}")
-
-
 async def on_startup(dispatcher):
     """Bot ishga tushganda"""
     global presentation_worker
@@ -93,13 +53,6 @@ async def on_startup(dispatcher):
         logger.info("✅ Database jadvallari tayyor")
     except Exception as e:
         logger.error(f"❌ Database xato: {e}")
-
-    # ✅ YANGI: Migratsiyalarni ishga tushirish
-    try:
-        run_migrations()
-        logger.info("✅ Database migratsiyalar tayyor")
-    except Exception as e:
-        logger.error(f"❌ Migration xato: {e}")
 
     # Background worker'ni ishga tushirish
     try:
@@ -142,7 +95,6 @@ async def on_shutdown(dispatcher):
 
 
 if __name__ == '__main__':
-    # Bot'ni ishga tushirish
     executor.start_polling(
         dp,
         on_startup=on_startup,

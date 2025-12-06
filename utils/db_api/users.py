@@ -13,7 +13,7 @@ class UserDatabase(Database):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id BIGINT NOT NULL UNIQUE,
             username VARCHAR(255) NULL,
-            ALTER TABLE Users ADD COLUMN free_presentations INTEGER DEFAULT 0;
+            free_presentations INTEGER DEFAULT 0,
             balance DECIMAL(10, 2) DEFAULT 0.00,
             total_spent DECIMAL(10, 2) DEFAULT 0.00,
             total_deposited DECIMAL(10, 2) DEFAULT 0.00,
