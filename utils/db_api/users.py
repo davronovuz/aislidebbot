@@ -13,7 +13,7 @@ class UserDatabase(Database):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id BIGINT NOT NULL UNIQUE,
             username VARCHAR(255) NULL,
-            free_presentations INTEGER DEFAULT 0,
+            free_presentations INTEGER DEFAULT 1,
             balance DECIMAL(10, 2) DEFAULT 0.00,
             total_spent DECIMAL(10, 2) DEFAULT 0.00,
             total_deposited DECIMAL(10, 2) DEFAULT 0.00,
@@ -166,7 +166,7 @@ class UserDatabase(Database):
 
     def add_user(self, telegram_id: int, username: str, created_at=None):
         if not self.user_exists(telegram_id):
-            sql = "INSERT INTO Users (telegram_id, username,free_presentations, created_at) VALUES (?, ?, 0, ?)"
+            sql = "INSERT INTO Users (telegram_id, username,free_presentations, created_at) VALUES (?, ?, 1, ?)"
             if created_at is None:
                 created_at = datetime.now().isoformat()
             self.execute(sql, parameters=(telegram_id, username, created_at), commit=True)
