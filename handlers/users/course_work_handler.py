@@ -80,7 +80,7 @@ async def course_work_start(message: types.Message, state: FSMContext):
 
         price_per_page = user_db.get_price('page_basic')
         if not price_per_page:
-            price_per_page = 1500.0
+            price_per_page = 500.0
 
         info_text = f"""
 📝 <b>MUSTAQIL ISH / REFERAT YARATISH</b>
