@@ -2,13 +2,13 @@ from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.dispatcher.filters import Text
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 import logging
 import json
 import uuid
 
 from loader import dp, bot, user_db
-from keyboards.default.user_keyboards import (
+from keyboards.default.default_keyboard import (
     main_menu_keyboard,
     cancel_keyboard,
     confirm_keyboard
@@ -29,7 +29,7 @@ class PresentationStates(StatesGroup):
     waiting_for_topic = State()
     waiting_for_details = State()
     waiting_for_slide_count = State()
-    waiting_for_theme = State()  # ✅ YANGI: Theme tanlash
+    waiting_for_theme = State()
     confirming_creation = State()
 
 
@@ -53,6 +53,19 @@ PITCH_QUESTIONS = [
 ]
 
 
+# ==================== SKIP KEYBOARD ✅ YANGI ====================
+def skip_or_cancel_keyboard():
+    """O'tkazib yuborish va Bekor qilish tugmalari"""
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton("⏭ O'tkazib yuborish")],
+            [KeyboardButton("❌ Bekor qilish")]
+        ],
+        resize_keyboard=True
+    )
+    return keyboard
+
+
 # ==================== THEME KEYBOARD ====================
 def get_theme_keyboard(current_index: int) -> InlineKeyboardMarkup:
     """Theme tanlash uchun inline keyboard"""
@@ -61,19 +74,15 @@ def get_theme_keyboard(current_index: int) -> InlineKeyboardMarkup:
     total = get_themes_count()
     theme = get_theme_by_index(current_index)
 
-    # Navigation tugmalari
     nav_buttons = []
 
-    # Oldingi tugma
     if current_index > 0:
         nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"theme_prev:{current_index - 1}"))
     else:
         nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"theme_prev:{total - 1}"))
 
-    # Hisob
     nav_buttons.append(InlineKeyboardButton(f"{current_index + 1}/{total}", callback_data="theme_count"))
 
-    # Keyingi tugma
     if current_index < total - 1:
         nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"theme_next:{current_index + 1}"))
     else:
@@ -81,13 +90,11 @@ def get_theme_keyboard(current_index: int) -> InlineKeyboardMarkup:
 
     keyboard.row(*nav_buttons)
 
-    # Tanlash tugmasi
     keyboard.add(InlineKeyboardButton(
         f"✅ {theme['name']} tanlash",
         callback_data=f"theme_select:{theme['id']}"
     ))
 
-    # O'tkazib yuborish
     keyboard.add(InlineKeyboardButton(
         "⏭ O'tkazib yuborish (standart)",
         callback_data="theme_skip"
@@ -119,9 +126,7 @@ async def show_theme_selection(message_or_callback, state: FSMContext, theme_ind
 
     keyboard = get_theme_keyboard(theme_index)
 
-    # Callback yoki message ekanligini tekshirish
     if isinstance(message_or_callback, types.CallbackQuery):
-        # Callback - rasmni edit qilish
         try:
             media = types.InputMediaPhoto(
                 media=theme['file_id'],
@@ -139,7 +144,6 @@ async def show_theme_selection(message_or_callback, state: FSMContext, theme_ind
                 parse_mode='HTML'
             )
     else:
-        # Message - yangi rasm yuborish
         await message_or_callback.answer_photo(
             photo=theme['file_id'],
             caption=caption,
@@ -204,8 +208,6 @@ async def start_handler(message: types.Message, state: FSMContext):
             logger.info(f"✅ Yangi user qo'shildi: {telegram_id}")
 
         balance = user_db.get_user_balance(telegram_id)
-
-        # ✅ YANGI: Bepul prezentatsiya qoldiq
         free_left = user_db.get_free_presentations(telegram_id)
 
         welcome_text = f"""
@@ -245,7 +247,7 @@ Pastdagi tugmalardan birini tanlang! 👇
 
 
 # ==================== PITCH DECK ====================
-@dp.message_handler(Text(equals="🎯 Pitch Deck yaratish"), state='*')
+@dp.message_handler(Text(equals="🎯 Pitch Deck"), state='*')
 async def pitch_deck_start(message: types.Message, state: FSMContext):
     telegram_id = message.from_user.id
 
@@ -255,8 +257,6 @@ async def pitch_deck_start(message: types.Message, state: FSMContext):
             price = 10000
 
         balance = user_db.get_user_balance(telegram_id)
-
-        # ✅ Bepul prezentatsiya tekshirish
         free_left = user_db.get_free_presentations(telegram_id)
 
         info_text = f"""
@@ -272,7 +272,6 @@ async def pitch_deck_start(message: types.Message, state: FSMContext):
 💳 <b>Balansingiz:</b> {balance:,.0f} so'm
 """
 
-        # Bepul bo'lsa ko'rsatish
         if free_left > 0:
             info_text += f"""
 🎁 <b>BEPUL PREZENTATSIYA:</b> {free_left} ta qoldi!
@@ -289,7 +288,7 @@ Kerakli: {price:,.0f} so'm
 Sizda: {balance:,.0f} so'm
 Yetishmayotgan: {(price - balance):,.0f} so'm
 
-Avval balansni to'ldiring: 💳 Balans to'ldirish
+Avval balansni to'ldiring: 💳 To'ldirish
 """
             await message.answer(info_text, parse_mode='HTML')
             return
@@ -330,19 +329,16 @@ Qancha ko'p ma'lumot bersangiz, shuncha yaxshi natija!
             answers = user_data.get('answers', [])
             price = user_data.get('price', 50000)
 
-            # Bepul tekshirish
             free_left = user_db.get_free_presentations(telegram_id)
             is_free = free_left > 0
 
             if is_free:
-                # BEPUL - pul yechilmaydi
                 logger.info(f"🎁 BEPUL Pitch Deck: User {telegram_id}, Qolgan: {free_left}")
 
-                # Bepul prezentatsiyani kamaytirish
                 user_db.use_free_presentation(telegram_id)
                 new_free = user_db.get_free_presentations(telegram_id)
 
-                amount_charged = 0  # Bepul
+                amount_charged = 0
 
                 success_text = f"""
 🎁 <b>BEPUL Pitch Deck yaratish boshlandi!</b>
@@ -361,7 +357,6 @@ Qancha ko'p ma'lumot bersangiz, shuncha yaxshi natija!
 Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
 """
             else:
-                # PULLIK - balansdan yechish
                 current_balance = user_db.get_user_balance(telegram_id)
                 logger.info(f"📊 Pitch Deck: User {telegram_id}, Balans: {current_balance}, Narx: {price}")
 
@@ -370,7 +365,7 @@ Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
                         f"❌ <b>Balans yetarli emas!</b>\n\n"
                         f"Kerakli: {price:,.0f} so'm\n"
                         f"Sizda: {current_balance:,.0f} so'm\n\n"
-                        f"Balansni to'ldiring: 💳 Balans to'ldirish",
+                        f"Balansni to'ldiring: 💳 To'ldirish",
                         parse_mode='HTML',
                         reply_markup=main_menu_keyboard()
                     )
@@ -419,7 +414,6 @@ Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
 Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
 """
 
-            # Task yaratish (ikkala holatda ham)
             task_uuid = str(uuid.uuid4())
             content_data = {'answers': answers, 'questions': PITCH_QUESTIONS}
 
@@ -433,7 +427,6 @@ Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
             )
 
             if not task_id:
-                # Agar xato bo'lsa, pulni qaytarish (agar pullik bo'lsa)
                 if not is_free:
                     user_db.add_to_balance(telegram_id, price)
                 await message.answer("❌ Task yaratishda xatolik!", parse_mode='HTML')
@@ -454,26 +447,29 @@ Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
 @dp.message_handler(state=PitchDeckStates.waiting_for_answer)
 async def pitch_deck_answer(message: types.Message, state: FSMContext):
     """Pitch Deck savollariga javoblarni qabul qilish"""
+
+    # ✅ Bekor qilish tekshirish
+    if message.text == "❌ Bekor qilish":
+        await state.finish()
+        await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
+        return
+
     user_data = await state.get_data()
     current_q = user_data.get('current_question', 0)
     answers = user_data.get('answers', [])
 
-    # Javobni qo'shish
     answers.append(message.text.strip())
     next_q = current_q + 1
 
     if next_q < len(PITCH_QUESTIONS):
-        # Keyingi savol
         await state.update_data(current_question=next_q, answers=answers)
         progress = f"✅ {next_q}/{len(PITCH_QUESTIONS)} savol javoblandi\n\n"
         await message.answer(progress + PITCH_QUESTIONS[next_q], reply_markup=cancel_keyboard(), parse_mode='HTML')
     else:
-        # Barcha savollar tugadi
         await state.update_data(answers=answers)
         price = user_data.get('price', 50000)
         balance = user_db.get_user_balance(message.from_user.id)
 
-        # Bepul tekshirish
         free_left = user_db.get_free_presentations(message.from_user.id)
 
         summary = f"""
@@ -505,7 +501,7 @@ Qoladi: {(balance - price):,.0f} so'm
 
 
 # ==================== PREZENTATSIYA ====================
-@dp.message_handler(Text(equals="📊 Prezentatsiya yaratish"), state='*')
+@dp.message_handler(Text(equals="📊 Prezentatsiya"), state='*')
 async def presentation_start(message: types.Message, state: FSMContext):
     telegram_id = message.from_user.id
 
@@ -515,8 +511,6 @@ async def presentation_start(message: types.Message, state: FSMContext):
             price_per_slide = 2000.0
 
         balance = user_db.get_user_balance(telegram_id)
-
-        # Bepul prezentatsiya tekshirish
         free_left = user_db.get_free_presentations(telegram_id)
 
         info_text = f"""
@@ -533,7 +527,6 @@ async def presentation_start(message: types.Message, state: FSMContext):
 💳 <b>Balansingiz:</b> {balance:,.0f} so'm
 """
 
-        # Bepul bo'lsa ko'rsatish
         if free_left > 0:
             info_text += f"""
 🎁 <b>BEPUL PREZENTATSIYA:</b> {free_left} ta qoldi!
@@ -561,6 +554,13 @@ async def presentation_start(message: types.Message, state: FSMContext):
 @dp.message_handler(state=PresentationStates.waiting_for_topic)
 async def presentation_topic(message: types.Message, state: FSMContext):
     """Mavzuni qabul qilish"""
+
+    # ✅ Bekor qilish tekshirish
+    if message.text == "❌ Bekor qilish":
+        await state.finish()
+        await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
+        return
+
     topic = message.text.strip()
     await state.update_data(topic=topic)
 
@@ -573,20 +573,27 @@ async def presentation_topic(message: types.Message, state: FSMContext):
 - Qamrab olish kerak bo'lgan mavzular
 - Maqsadli auditoriya
 - Maxsus talablar
-
-Yoki "o'tkazib yuborish" yozing.
 """
 
-    await message.answer(text, reply_markup=cancel_keyboard(), parse_mode='HTML')
+    # ✅ O'tkazib yuborish TUGMASI
+    await message.answer(text, reply_markup=skip_or_cancel_keyboard(), parse_mode='HTML')
     await PresentationStates.waiting_for_details.set()
 
 
 @dp.message_handler(state=PresentationStates.waiting_for_details)
 async def presentation_details(message: types.Message, state: FSMContext):
     """Qo'shimcha ma'lumotlarni qabul qilish"""
+
+    # ✅ Bekor qilish tekshirish
+    if message.text == "❌ Bekor qilish":
+        await state.finish()
+        await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
+        return
+
     details = message.text.strip()
 
-    if details.lower() in ['o\'tkazib yuborish', 'otkazib yuborish', 'skip', 'yo\'q', 'yoq']:
+    # ✅ O'tkazib yuborish tugmasi bosilganda
+    if details in ["⏭ O'tkazib yuborish", "o'tkazib yuborish", "otkazib yuborish", "skip"]:
         details = "Qo'shimcha ma'lumot yo'q"
 
     await state.update_data(details=details)
@@ -607,6 +614,13 @@ Masalan: 10
 @dp.message_handler(state=PresentationStates.waiting_for_slide_count)
 async def presentation_slide_count(message: types.Message, state: FSMContext):
     """Slayd sonini qabul qilish va THEME tanlashga o'tkazish"""
+
+    # ✅ Bekor qilish tekshirish
+    if message.text == "❌ Bekor qilish":
+        await state.finish()
+        await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
+        return
+
     try:
         slide_count = int(message.text.strip())
 
@@ -619,8 +633,6 @@ async def presentation_slide_count(message: types.Message, state: FSMContext):
         total_price = price_per_slide * slide_count
 
         balance = user_db.get_user_balance(message.from_user.id)
-
-        # Bepul tekshirish
         free_left = user_db.get_free_presentations(message.from_user.id)
 
         await state.update_data(
@@ -629,7 +641,6 @@ async def presentation_slide_count(message: types.Message, state: FSMContext):
             free_left=free_left
         )
 
-        # ✅ Balans tekshirish (bepul bo'lmasa)
         if free_left <= 0 and balance < total_price:
             summary = f"""
 📊 <b>PREZENTATSIYA</b>
@@ -643,13 +654,12 @@ Balansingiz: {balance:,.0f} so'm
 Kerakli: {total_price:,.0f} so'm
 Yetishmayotgan: {(total_price - balance):,.0f} so'm
 
-Balansni to'ldiring: 💳 Balans to'ldirish
+Balansni to'ldiring: 💳 To'ldirish
 """
             await message.answer(summary, parse_mode='HTML', reply_markup=main_menu_keyboard())
             await state.finish()
             return
 
-        # ✅ YANGI: Theme tanlashga o'tkazish
         await message.answer("🎨 <b>Endi prezentatsiya uchun theme tanlang:</b>", parse_mode='HTML')
         await show_theme_selection(message, state, 0)
         await PresentationStates.waiting_for_theme.set()
@@ -704,7 +714,6 @@ async def theme_select_callback(callback: types.CallbackQuery, state: FSMContext
 
         await callback.answer(f"✅ {theme['name']} tanlandi!")
 
-        # Tasdiqlash ekraniga o'tkazish
         await show_confirmation(callback.message, state)
 
     except Exception as e:
@@ -720,7 +729,6 @@ async def theme_skip_callback(callback: types.CallbackQuery, state: FSMContext):
 
         await callback.answer("⏭ Standart dizayn tanlandi")
 
-        # Tasdiqlash ekraniga o'tkazish
         await show_confirmation(callback.message, state)
 
     except Exception as e:
@@ -743,7 +751,6 @@ async def show_confirmation(message: types.Message, state: FSMContext):
     telegram_id = message.chat.id
     balance = user_db.get_user_balance(telegram_id)
 
-    # Theme emoji
     theme_emoji = "🎨"
     if selected_theme_id:
         theme = get_theme_by_id(selected_theme_id)
@@ -759,7 +766,6 @@ async def show_confirmation(message: types.Message, state: FSMContext):
 {theme_emoji} <b>Theme:</b> {selected_theme_name}
 """
 
-    # Bepul yoki pullik
     if free_left > 0:
         summary += f"""
 🎁 <b>BEPUL!</b>
@@ -778,7 +784,6 @@ Qoladi: {(balance - total_price):,.0f} so'm
 ✅ Prezentatsiya yaratishni boshlaymizmi?
 """
 
-    # Eski rasmni o'chirish
     try:
         await message.delete()
     except:
@@ -802,23 +807,20 @@ async def presentation_confirm(message: types.Message, state: FSMContext):
     details = user_data.get('details')
     slide_count = user_data.get('slide_count')
     total_price = user_data.get('total_price')
-    selected_theme_id = user_data.get('selected_theme_id')  # ✅ YANGI
-    selected_theme_name = user_data.get('selected_theme_name', 'Standart')  # ✅ YANGI
+    selected_theme_id = user_data.get('selected_theme_id')
+    selected_theme_name = user_data.get('selected_theme_name', 'Standart')
 
     try:
-        # Bepul tekshirish
         free_left = user_db.get_free_presentations(telegram_id)
         is_free = free_left > 0
 
         if is_free:
-            # BEPUL - pul yechilmaydi
             logger.info(f"🎁 BEPUL Prezentatsiya: User {telegram_id}, Qolgan: {free_left}")
 
-            # Bepul prezentatsiyani kamaytirish
             user_db.use_free_presentation(telegram_id)
             new_free = user_db.get_free_presentations(telegram_id)
 
-            amount_charged = 0  # Bepul
+            amount_charged = 0
 
             success_text = f"""
 🎁 <b>BEPUL Prezentatsiya yaratish boshlandi!</b>
@@ -838,7 +840,6 @@ async def presentation_confirm(message: types.Message, state: FSMContext):
 Tayyor bo'lgach sizga <b>PPTX fayl</b> yuboriladi! 🎉
 """
         else:
-            # PULLIK - balansdan yechish
             current_balance = user_db.get_user_balance(telegram_id)
 
             if current_balance < total_price:
@@ -890,15 +891,13 @@ Tayyor bo'lgach sizga <b>PPTX fayl</b> yuboriladi! 🎉
 Tayyor bo'lgach sizga <b>PPTX fayl</b> yuboriladi! 🎉
 """
 
-        # Task yaratish (ikkala holatda ham)
         task_uuid = str(uuid.uuid4())
 
-        # ✅ YANGI: theme_id ni content_data ga qo'shish
         content_data = {
             'topic': topic,
             'details': details,
             'slide_count': slide_count,
-            'theme_id': selected_theme_id  # ✅ YANGI
+            'theme_id': selected_theme_id
         }
 
         task_id = user_db.create_presentation_task(
@@ -911,7 +910,6 @@ Tayyor bo'lgach sizga <b>PPTX fayl</b> yuboriladi! 🎉
         )
 
         if not task_id:
-            # Agar xato bo'lsa, pulni qaytarish (agar pullik bo'lsa)
             if not is_free:
                 user_db.add_to_balance(telegram_id, total_price)
             await message.answer("❌ Task yaratishda xatolik!", parse_mode='HTML')
@@ -943,8 +941,6 @@ async def balance_info(message: types.Message, state: FSMContext):
             return
 
         transactions = user_db.get_user_transactions(telegram_id, limit=5)
-
-        # ✅ Bepul qoldiq
         free_left = user_db.get_free_presentations(telegram_id)
 
         info_text = f"""
@@ -976,7 +972,7 @@ async def balance_info(message: types.Message, state: FSMContext):
         await message.answer("❌ Ma'lumotlarni olishda xatolik yuz berdi.")
 
 
-@dp.message_handler(Text(equals="💳 Balans to'ldirish"), state='*')
+@dp.message_handler(Text(equals="💳 To'ldirish"), state='*')
 async def balance_topup_start(message: types.Message, state: FSMContext):
     text = """
 💳 <b>BALANS TO'LDIRISH</b>
@@ -995,6 +991,12 @@ Masalan: 50000
 
 @dp.message_handler(state=BalanceStates.waiting_for_amount)
 async def balance_topup_amount(message: types.Message, state: FSMContext):
+    # ✅ Bekor qilish tekshirish
+    if message.text == "❌ Bekor qilish":
+        await state.finish()
+        await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
+        return
+
     try:
         amount = float(message.text.strip().replace(',', '').replace(' ', ''))
 
@@ -1078,7 +1080,6 @@ Tasdiqlangach balansingizga avtomatik qo'shiladi! 💳
 
         await message.answer(success_text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
 
-        # Admin'larga notification yuborish
         user_name = message.from_user.full_name
         await send_admin_notification(trans_id, telegram_id, amount, file_id, user_name)
 
@@ -1090,6 +1091,19 @@ Tasdiqlangach balansingizga avtomatik qo'shiladi! 💳
         logger.error(f"❌ Balance receipt xato: {e}")
         await message.answer("❌ <b>Xatolik yuz berdi!</b>", parse_mode='HTML')
         await state.finish()
+
+
+# ✅ Chek kutish holatida text xabar kelganda
+@dp.message_handler(state=BalanceStates.waiting_for_receipt)
+async def balance_receipt_text_handler(message: types.Message, state: FSMContext):
+    """Chek o'rniga text kelganda"""
+    # Bekor qilish tekshirish
+    if message.text == "❌ Bekor qilish":
+        await state.finish()
+        await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
+        return
+
+    await message.answer("📸 Iltimos, chek <b>rasm</b> yoki <b>fayl</b> sifatida yuboring!", parse_mode='HTML')
 
 
 # ==================== CANCEL ====================
@@ -1122,7 +1136,6 @@ async def prices_handler(message: types.Message):
             if price['is_active']:
                 price_text += f"<b>{price['description']}</b>\n💰 {price['price']:,.0f} {price['currency']}\n━━━━━━━━━━━━━━━\n"
 
-        # Bepul haqida
         telegram_id = message.from_user.id
         free_left = user_db.get_free_presentations(telegram_id)
 
@@ -1147,13 +1160,13 @@ async def help_handler(message: types.Message):
 /help - Yordam
 
 <b>🎯 Pitch Deck:</b>
-1. "Pitch Deck yaratish" tugmasini bosing
+1. "Pitch Deck" tugmasini bosing
 2. 10 ta savolga javob bering
 3. Tasdiqlang
 4. 3-7 daqiqada tayyor!
 
 <b>📊 Prezentatsiya:</b>
-1. "Prezentatsiya yaratish" tugmasini bosing
+1. "Prezentatsiya" tugmasini bosing
 2. Mavzu kiriting
 3. Slaydlar sonini tanlang
 4. 🎨 Theme tanlang (ixtiyoriy)
@@ -1167,14 +1180,14 @@ async def help_handler(message: types.Message):
 4. Admin tasdiqlaydi (5-30 daqiqa)
 
 <b>🎁 Bepul prezentatsiya:</b>
-Har bir yangi user 2 ta bepul prezentatsiya oladi!
+Har bir yangi user 1 ta bepul prezentatsiya oladi!
 
 <b>🤖 Professional AI:</b>
 - AI content yaratadi
 - Professional dizayn
 - PPTX format
 
-❓ Savol: @@dostonbek_musurmonov
+❓ Savol: @dostonbek_musurmonov
 """
 
     await message.answer(help_text, parse_mode='HTML')

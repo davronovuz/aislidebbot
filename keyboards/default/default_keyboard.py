@@ -1,8 +1,9 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 
-# ==================== ADMIN ASOSIY MENYU ====================
-# Eski funksiyalar + yangi funksiyalar
+# ==================== ADMIN MENYULARI ====================
+# admin_panel.py uchun kerak
+
 menu_admin = ReplyKeyboardMarkup(
     keyboard=[
         [
@@ -31,7 +32,6 @@ menu_admin = ReplyKeyboardMarkup(
 )
 
 
-# ==================== ADMINLAR BOSHQARUVI ICHKI MENYU ====================
 menu_ichki_admin = ReplyKeyboardMarkup(
     keyboard=[
         [
@@ -48,7 +48,6 @@ menu_ichki_admin = ReplyKeyboardMarkup(
 )
 
 
-# ==================== KANAL BOSHQARUVI ICHKI MENYU ====================
 menu_ichki_kanal = ReplyKeyboardMarkup(
     keyboard=[
         [
@@ -65,119 +64,174 @@ menu_ichki_kanal = ReplyKeyboardMarkup(
 )
 
 
-# ==================== ODDIY FOYDALANUVCHI MENYUSI ====================
-menu_user = ReplyKeyboardMarkup(
-    keyboard=[
-        [
-            KeyboardButton("🎨 Prezentatsiya yaratish"),
-            KeyboardButton("💰 Balansim")
+# ==================== USER MENYULARI ====================
+
+def main_menu_keyboard():
+    """
+    Asosiy menyu - YANGILANGAN
+    ✅ Mustaqil ish qo'shildi
+    ✅ UX yaxshilandi
+    """
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton("📊 Prezentatsiya"),
+            ],
+            [
+                KeyboardButton("📝 Mustaqil ish"),
+            ],
+            [
+                KeyboardButton("💰 Balansim"),
+                KeyboardButton("💳 To'ldirish")
+            ],
+            [
+                KeyboardButton("💵 Narxlar"),
+                KeyboardButton("ℹ️ Yordam")
+            ]
         ],
-        [
-            KeyboardButton("💳 Balans to'ldirish"),
-            KeyboardButton("📊 Mening task'larim")
-        ],
-        [
-            KeyboardButton("💵 Narxlar"),
-            KeyboardButton("ℹ️ Yordam")
-        ]
-    ],
-    resize_keyboard=True
-)
+        resize_keyboard=True
+    )
+    return keyboard
 
 
-# ==================== HELPER FUNCTIONS (ESKI STIL) ====================
-def admin_btn():
-    """Admin panel tugmalari"""
-    btn = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True, row_width=3)
-    statistika = KeyboardButton("📊 Statistika")
-    reklama = KeyboardButton("🎁 Reklama")
-    add_channel = KeyboardButton("🖇 Kanallar boshqaruvi")
-    return btn.add(statistika, reklama, add_channel)
-
-
-def channels_btn():
-    """Kanallar boshqaruvi tugmalari"""
-    btn = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True, row_width=2)
-    add_channel = KeyboardButton("⚙️ Kanal qo'shish")
-    delete_channel = KeyboardButton("🗑 Kanalni o'chirish")
-    exits = KeyboardButton("🔙 Ortga qaytish")
-    return btn.add(add_channel, delete_channel, exits)
-
-
-def exit_btn():
-    """Ortga qaytish tugmasi"""
-    btn = ReplyKeyboardMarkup(one_time_keyboard=True, row_width=2, resize_keyboard=True)
-    return btn.add("🔙 Ortga qaytish")
-
-
-# ==================== YANGI HELPER FUNCTIONS ====================
-def cancel_btn():
+def cancel_keyboard():
     """Bekor qilish tugmasi"""
-    btn = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-    return btn.add(KeyboardButton("❌ Bekor qilish"))
-
-
-def yes_no_btn():
-    """Ha/Yo'q tugmalari"""
-    btn = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True, row_width=2)
-    yes = KeyboardButton("✅ Ha")
-    no = KeyboardButton("❌ Yo'q")
-    return btn.add(yes, no)
-
-
-# ==================== BEKOR QILISH TUGMASI ====================
-cancel_button = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton("❌ Bekor qilish")]
-    ],
-    resize_keyboard=True,
-    one_time_keyboard=True
-)
-
-
-# ==================== HA/YO'Q TUGMALARI ====================
-yes_no_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [
-            KeyboardButton("✅ Ha"),
-            KeyboardButton("❌ Yo'q")
-        ]
-    ],
-    resize_keyboard=True,
-    one_time_keyboard=True
-)
-
-
-# ==================== PAKET TANLASH ====================
-package_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [
-            KeyboardButton("📦 Oddiy paket"),
-            KeyboardButton("⭐ Pro paket")
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton("❌ Bekor qilish")]
         ],
-        [
-            KeyboardButton("💵 Narxlarni ko'rish"),
-            KeyboardButton("❌ Bekor qilish")
-        ]
-    ],
-    resize_keyboard=True,
-    one_time_keyboard=True
-)
+        resize_keyboard=True
+    )
+    return keyboard
 
 
-# ==================== TO'LOV USULI ====================
-payment_method_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [
-            KeyboardButton("💳 Karta orqali"),
-            KeyboardButton("💰 Click/Payme")
+def confirm_keyboard():
+    """Tasdiqlash tugmalari"""
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton("✅ Ha, boshlash"),
+                KeyboardButton("❌ Yo'q")
+            ]
         ],
-        [
-            KeyboardButton("❌ Bekor qilish")
-        ]
-    ],
-    resize_keyboard=True,
-    one_time_keyboard=True
-)
+        resize_keyboard=True
+    )
+    return keyboard
 
 
+def skip_keyboard():
+    """O'tkazib yuborish tugmasi"""
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton("⏭ O'tkazib yuborish")],
+            [KeyboardButton("❌ Bekor qilish")]
+        ],
+        resize_keyboard=True
+    )
+    return keyboard
+
+
+def back_keyboard():
+    """Orqaga tugmasi"""
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton("🔙 Orqaga")]
+        ],
+        resize_keyboard=True
+    )
+    return keyboard
+
+
+# ==================== INLINE KEYBOARDS ====================
+
+def slide_count_keyboard():
+    """Slayd sonini tanlash - inline"""
+    keyboard = InlineKeyboardMarkup(row_width=4)
+    keyboard.add(
+        InlineKeyboardButton("5", callback_data="slides:5"),
+        InlineKeyboardButton("7", callback_data="slides:7"),
+        InlineKeyboardButton("10", callback_data="slides:10"),
+        InlineKeyboardButton("15", callback_data="slides:15"),
+    )
+    keyboard.add(
+        InlineKeyboardButton("🔢 Boshqa son", callback_data="slides:custom"),
+    )
+    keyboard.add(
+        InlineKeyboardButton("❌ Bekor qilish", callback_data="slides:cancel"),
+    )
+    return keyboard
+
+
+def page_count_keyboard():
+    """Mustaqil ish sahifa sonini tanlash"""
+    keyboard = InlineKeyboardMarkup(row_width=4)
+    keyboard.add(
+        InlineKeyboardButton("5", callback_data="pages:5"),
+        InlineKeyboardButton("10", callback_data="pages:10"),
+        InlineKeyboardButton("15", callback_data="pages:15"),
+        InlineKeyboardButton("20", callback_data="pages:20"),
+    )
+    keyboard.add(
+        InlineKeyboardButton("🔢 Boshqa son", callback_data="pages:custom"),
+    )
+    keyboard.add(
+        InlineKeyboardButton("❌ Bekor qilish", callback_data="pages:cancel"),
+    )
+    return keyboard
+
+
+def format_choice_keyboard():
+    """Format tanlash - PDF yoki DOCX"""
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard.add(
+        InlineKeyboardButton("📄 PDF", callback_data="format:pdf"),
+        InlineKeyboardButton("📝 DOCX", callback_data="format:docx"),
+    )
+    keyboard.add(
+        InlineKeyboardButton("❌ Bekor qilish", callback_data="format:cancel"),
+    )
+    return keyboard
+
+
+def confirm_inline_keyboard():
+    """Tasdiqlash - inline"""
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard.add(
+        InlineKeyboardButton("✅ Ha, boshlash", callback_data="confirm:yes"),
+        InlineKeyboardButton("❌ Yo'q", callback_data="confirm:no"),
+    )
+    return keyboard
+
+
+# ==================== MUSTAQIL ISH KEYBOARDS ====================
+
+def course_work_type_keyboard():
+    """Mustaqil ish turi tanlash"""
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard.add(
+        InlineKeyboardButton("📚 Referat", callback_data="work_type:referat"),
+        InlineKeyboardButton("📖 Kurs ishi", callback_data="work_type:kurs_ishi"),
+        InlineKeyboardButton("📝 Mustaqil ish", callback_data="work_type:mustaqil_ish"),
+        InlineKeyboardButton("🔬 Ilmiy maqola", callback_data="work_type:ilmiy_maqola"),
+        InlineKeyboardButton("📋 Hisobot", callback_data="work_type:hisobot"),
+    )
+    keyboard.add(
+        InlineKeyboardButton("❌ Bekor qilish", callback_data="work_type:cancel"),
+    )
+    return keyboard
+
+
+def language_keyboard():
+    """Til tanlash"""
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard.add(
+        InlineKeyboardButton("🇺🇿 O'zbek", callback_data="lang:uz"),
+        InlineKeyboardButton("🇷🇺 Rus", callback_data="lang:ru"),
+    )
+    keyboard.add(
+        InlineKeyboardButton("🇬🇧 Ingliz", callback_data="lang:en"),
+    )
+    keyboard.add(
+        InlineKeyboardButton("❌ Bekor qilish", callback_data="lang:cancel"),
+    )
+    return keyboard
