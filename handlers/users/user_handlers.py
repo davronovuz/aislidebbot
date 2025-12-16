@@ -224,12 +224,6 @@ async def start_handler(message: types.Message, state: FSMContext):
         welcome_text += """
 <b>📋 Xizmatlarimiz:</b>
 
-🎯 <b>Pitch Deck</b> - Startup uchun to'liq pitch prezentatsiya
-   • 10 ta savol
-   • Professional AI content
-   • Bozor tahlili
-   • Moliyaviy prognozlar
-
 📊 <b>Oddiy Prezentatsiya</b> - Istalgan mavzu bo'yicha
    • Tez va oddiy
    • Mavzu kiriting
