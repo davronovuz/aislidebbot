@@ -16,6 +16,8 @@ from utils.docx_generator import DocxGenerator
 
 logger = logging.getLogger(__name__)
 
+from keyboards.default.default_keyboard import main_menu_keyboard
+
 # Vercel manzilingiz
 WEB_APP_URL = "https://aislide-frontend.vercel.app/"
 
@@ -37,7 +39,19 @@ async def course_work_start(message: types.Message):
 
 
 # ==============================================================================
-# 2. DATA QABUL QILISH VA ISHGA TUSHIRISH
+# 2. BOSH MENYUGA QAYTISH
+# ==============================================================================
+@dp.message_handler(text="⬅️ Bosh menyu")
+async def back_to_main_menu(message: types.Message):
+    await message.answer(
+        "🏠 <b>Bosh menyu</b>",
+        reply_markup=main_menu_keyboard,
+        parse_mode='HTML'
+    )
+
+
+# ==============================================================================
+# 3. DATA QABUL QILISH VA ISHGA TUSHIRISH
 # ==============================================================================
 @dp.message_handler(content_types=ContentType.WEB_APP_DATA)
 async def web_app_data_handler(message: types.Message, state: FSMContext):
@@ -49,7 +63,10 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         data = json.loads(raw_data)
     except Exception as e:
         logger.error(f"Web App data error: {e}")
-        await message.answer("❌ Ma'lumotni o'qishda xatolik yuz berdi.")
+        await message.answer(
+            "❌ Ma'lumotni o'qishda xatolik yuz berdi.",
+            reply_markup=main_menu_keyboard
+        )
         return
 
     topic = data.get('topic', 'Mavzusiz')
@@ -80,32 +97,30 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         )
 
         if not content_json:
-            # Agar AI hech narsa qaytarmasa
             try:
                 await status_msg.edit_text("❌ AI generatsiya qila olmadi. Qaytadan urinib ko'ring.")
             except:
                 await message.answer("❌ AI generatsiya qila olmadi. Qaytadan urinib ko'ring.")
+
+            await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard)
             return
 
         # ---------------------------------------------------------
-        # 4. STATUSNI YANGILASH (XATOSIZ)
+        # 4. STATUSNI YANGILASH
         # ---------------------------------------------------------
-        # Bu yerda xato chiqsa ham (MessageCantBeEdited), kod to'xtamasligi kerak!
         try:
             await status_msg.edit_text("📄 <b>Fayl shakllantirilmoqda...</b>", parse_mode='HTML')
         except Exception:
-            pass  # Xabar o'zgarmasa ham mayli, asosiysi fayl yasalishi kerak
+            pass
 
         # ---------------------------------------------------------
         # 5. DOCX GENERATOR (Word fayl yasash)
         # ---------------------------------------------------------
         docx_generator = DocxGenerator()
 
-        # Fayl nomini tayyorlash
         safe_topic = "".join([c for c in topic if c.isalnum() or c in (' ', '-', '_')]).strip()[:20]
         filename = f"{safe_topic}_{telegram_id}.docx"
 
-        # Downloads papkasini tekshirish
         if not os.path.exists("downloads"):
             os.makedirs("downloads")
 
@@ -118,7 +133,10 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         )
 
         if not success:
-            await message.answer("❌ Fayl yaratishda xatolik bo'ldi.")
+            await message.answer(
+                "❌ Fayl yaratishda xatolik bo'ldi.",
+                reply_markup=main_menu_keyboard
+            )
             return
 
         # ---------------------------------------------------------
@@ -127,16 +145,16 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         await message.answer_document(
             document=types.InputFile(file_path),
             caption=f"✅ <b>Tayyor!</b>\n\n📄 <b>Mavzu:</b> {topic}\n👤 <b>Siz uchun maxsus tayyorlandi.</b>",
-            parse_mode='HTML'
+            parse_mode='HTML',
+            reply_markup=main_menu_keyboard
         )
 
-        # 7. Tozalash (Faylni o'chiramiz)
+        # 7. Tozalash
         try:
             os.remove(file_path)
         except Exception as e:
             logger.error(f"Faylni o'chirishda xato: {e}")
 
-        # Eski xabarni o'chirishga urinib ko'ramiz
         try:
             await status_msg.delete()
         except:
@@ -144,8 +162,9 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
 
     except Exception as e:
         logger.error(f"Umumiy jarayonda xato: {e}")
-        # Agar status_msg ni o'zgartirib bo'lmasa, yangi xabar yuboramiz
         try:
             await status_msg.edit_text("❌ Tizimda kutilmagan xatolik yuz berdi. Adminga xabar bering.")
         except:
             await message.answer("❌ Tizimda kutilmagan xatolik yuz berdi. Adminga xabar bering.")
+
+        await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard)
