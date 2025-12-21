@@ -45,7 +45,7 @@ async def course_work_start(message: types.Message):
 async def back_to_main_menu(message: types.Message):
     await message.answer(
         "🏠 <b>Bosh menyu</b>",
-        reply_markup=main_menu_keyboard,
+        reply_markup=main_menu_keyboard(),  # <-- () qo'shildi
         parse_mode='HTML'
     )
 
@@ -65,7 +65,7 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         logger.error(f"Web App data error: {e}")
         await message.answer(
             "❌ Ma'lumotni o'qishda xatolik yuz berdi.",
-            reply_markup=main_menu_keyboard
+            reply_markup=main_menu_keyboard()  # <-- () qo'shildi
         )
         return
 
@@ -102,7 +102,7 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
             except:
                 await message.answer("❌ AI generatsiya qila olmadi. Qaytadan urinib ko'ring.")
 
-            await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard)
+            await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard())  # <-- ()
             return
 
         # ---------------------------------------------------------
@@ -135,7 +135,7 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         if not success:
             await message.answer(
                 "❌ Fayl yaratishda xatolik bo'ldi.",
-                reply_markup=main_menu_keyboard
+                reply_markup=main_menu_keyboard()  # <-- ()
             )
             return
 
@@ -146,7 +146,7 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
             document=types.InputFile(file_path),
             caption=f"✅ <b>Tayyor!</b>\n\n📄 <b>Mavzu:</b> {topic}\n👤 <b>Siz uchun maxsus tayyorlandi.</b>",
             parse_mode='HTML',
-            reply_markup=main_menu_keyboard
+            reply_markup=main_menu_keyboard()  # <-- ()
         )
 
         # 7. Tozalash
@@ -167,4 +167,4 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         except:
             await message.answer("❌ Tizimda kutilmagan xatolik yuz berdi. Adminga xabar bering.")
 
-        await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard)
+        await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard())  # <-- ()
