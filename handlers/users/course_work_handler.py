@@ -67,23 +67,71 @@ def skip_or_cancel_keyboard():
     )
     return keyboard
 
+#
+# # ==================== START HANDLER ====================
+# @dp.message_handler(Text(equals="📝 Mustaqil ish"), state='*')
+# async def course_work_start(message: types.Message, state: FSMContext):
+#     """Mustaqil ish yaratishni boshlash"""
+#     telegram_id = message.from_user.id
+#
+#     try:
+#         free_left = user_db.get_free_presentations(telegram_id)
+#         balance = user_db.get_user_balance(telegram_id)
+#
+#         price_per_page = user_db.get_price('page_basic')
+#         if not price_per_page:
+#             price_per_page = 500.0
+#
+#         info_text = f"""
+# 📝 <b>MUSTAQIL ISH / REFERAT YARATISH</b>
+#
+# 🤖 <b>AI yordamida professional hujjat yarating!</b>
+#
+# 📋 <b>Mavjud turlar:</b>
+# 📚 Referat (5-15 sahifa)
+# 📖 Kurs ishi (15-40 sahifa)
+# 📝 Mustaqil ish (5-20 sahifa)
+# 🔬 Ilmiy maqola (3-15 sahifa)
+# 📋 Hisobot (3-20 sahifa)
+#
+# 💰 <b>Narx:</b> {price_per_page:,.0f} so'm / sahifa
+# 💳 <b>Balansingiz:</b> {balance:,.0f} so'm
+# """
+#
+#         if free_left > 0:
+#             info_text += f"""
+# 🎁 <b>BEPUL:</b> {free_left} ta qoldi!
+# ✨ Bu ish TEKIN bo'ladi!
+# """
+#
+#         info_text += """
+# 📄 <b>Formatlar:</b> PDF yoki DOCX
+#
+# Ish turini tanlang 👇
+# """
+#
+#         await message.answer(info_text, reply_markup=cancel_keyboard(), parse_mode='HTML')
+#         await message.answer("📋 Qaysi turdagi ish kerak?", reply_markup=course_work_type_keyboard())
+#
+#         await state.update_data(price_per_page=price_per_page, free_left=free_left)
+#         await CourseWorkStates.waiting_for_type.set()
+#
+#     except Exception as e:
+#         logger.error(f"❌ Course work start xato: {e}")
+#         await message.answer("❌ Xatolik yuz berdi. Qaytadan urinib ko'ring.")
 
-# ==================== START HANDLER ====================
+
+
 @dp.message_handler(Text(equals="📝 Mustaqil ish"), state='*')
 async def course_work_start(message: types.Message, state: FSMContext):
     """Mustaqil ish yaratishni boshlash"""
     telegram_id = message.from_user.id
 
     try:
-        free_left = user_db.get_free_presentations(telegram_id)
-        balance = user_db.get_user_balance(telegram_id)
-
-        price_per_page = user_db.get_price('page_basic')
-        if not price_per_page:
-            price_per_page = 500.0
-
-        info_text = f"""
+        info_text = """
 📝 <b>MUSTAQIL ISH / REFERAT YARATISH</b>
+
+🎁 <b>BUTUNLAY BEPUL!</b>
 
 🤖 <b>AI yordamida professional hujjat yarating!</b>
 
@@ -94,17 +142,6 @@ async def course_work_start(message: types.Message, state: FSMContext):
 🔬 Ilmiy maqola (3-15 sahifa)
 📋 Hisobot (3-20 sahifa)
 
-💰 <b>Narx:</b> {price_per_page:,.0f} so'm / sahifa
-💳 <b>Balansingiz:</b> {balance:,.0f} so'm
-"""
-
-        if free_left > 0:
-            info_text += f"""
-🎁 <b>BEPUL:</b> {free_left} ta qoldi!
-✨ Bu ish TEKIN bo'ladi!
-"""
-
-        info_text += """
 📄 <b>Formatlar:</b> PDF yoki DOCX
 
 Ish turini tanlang 👇
@@ -113,7 +150,6 @@ Ish turini tanlang 👇
         await message.answer(info_text, reply_markup=cancel_keyboard(), parse_mode='HTML')
         await message.answer("📋 Qaysi turdagi ish kerak?", reply_markup=course_work_type_keyboard())
 
-        await state.update_data(price_per_page=price_per_page, free_left=free_left)
         await CourseWorkStates.waiting_for_type.set()
 
     except Exception as e:
@@ -406,6 +442,75 @@ async def language_selected(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+
+
+#
+# async def show_course_work_summary(message: types.Message, state: FSMContext):
+#     """Yakuniy xulosa ko'rsatish"""
+#     user_data = await state.get_data()
+#
+#     work_emoji = user_data.get('work_emoji', '📝')
+#     work_name = user_data.get('work_name', 'Mustaqil ish')
+#     topic = user_data.get('topic', '')
+#     subject = user_data.get('subject', '')
+#     details = user_data.get('details', '')
+#     page_count = user_data.get('page_count', 10)
+#     format_name = user_data.get('format_name', 'PDF')
+#     language_name = user_data.get('language_name', "O'zbek tili")
+#     price_per_page = user_data.get('price_per_page', 1500)
+#     free_left = user_data.get('free_left', 0)
+#
+#     total_price = price_per_page * page_count
+#     telegram_id = message.chat.id
+#     balance = user_db.get_user_balance(telegram_id)
+#
+#     summary = f"""
+# 📋 <b>BUYURTMA XULOSASI</b>
+#
+# {work_emoji} <b>Turi:</b> {work_name}
+# 📚 <b>Mavzu:</b> {topic}
+# 🎓 <b>Fan:</b> {subject}
+# 📊 <b>Sahifalar:</b> {page_count} ta
+# 📄 <b>Format:</b> {format_name}
+# 🌐 <b>Til:</b> {language_name}
+# """
+#
+#     if details:
+#         summary += f"📝 <b>Qo'shimcha:</b> {details[:100]}{'...' if len(details) > 100 else ''}\n"
+#
+#     if free_left > 0:
+#         summary += f"""
+# 🎁 <b>BEPUL!</b>
+# Sizda {free_left} ta bepul ish qoldi.
+# Bu ish TEKIN bo'ladi!
+#
+# ✅ Boshlaysizmi?
+# """
+#     else:
+#         summary += f"""
+# 💰 <b>To'lov:</b>
+# Narx: {total_price:,.0f} so'm ({page_count} × {price_per_page:,.0f})
+# Balansingiz: {balance:,.0f} so'm
+# """
+#         if balance >= total_price:
+#             summary += f"Qoladi: {(balance - total_price):,.0f} so'm\n\n✅ Boshlaysizmi?"
+#         else:
+#             summary += f"""
+# ❌ <b>Balans yetarli emas!</b>
+# Yetishmayotgan: {(total_price - balance):,.0f} so'm
+#
+# Balansni to'ldiring: 💳 To'ldirish
+# """
+#             await message.answer(summary, parse_mode='HTML', reply_markup=main_menu_keyboard())
+#             await state.finish()
+#             return
+#
+#     await state.update_data(total_price=total_price)
+#     await message.answer(summary, reply_markup=confirm_keyboard(), parse_mode='HTML')
+#     await CourseWorkStates.confirming_creation.set()
+
+
+
 async def show_course_work_summary(message: types.Message, state: FSMContext):
     """Yakuniy xulosa ko'rsatish"""
     user_data = await state.get_data()
@@ -418,12 +523,6 @@ async def show_course_work_summary(message: types.Message, state: FSMContext):
     page_count = user_data.get('page_count', 10)
     format_name = user_data.get('format_name', 'PDF')
     language_name = user_data.get('language_name', "O'zbek tili")
-    price_per_page = user_data.get('price_per_page', 1500)
-    free_left = user_data.get('free_left', 0)
-
-    total_price = price_per_page * page_count
-    telegram_id = message.chat.id
-    balance = user_db.get_user_balance(telegram_id)
 
     summary = f"""
 📋 <b>BUYURTMA XULOSASI</b>
@@ -439,39 +538,148 @@ async def show_course_work_summary(message: types.Message, state: FSMContext):
     if details:
         summary += f"📝 <b>Qo'shimcha:</b> {details[:100]}{'...' if len(details) > 100 else ''}\n"
 
-    if free_left > 0:
-        summary += f"""
-🎁 <b>BEPUL!</b>
-Sizda {free_left} ta bepul ish qoldi.
-Bu ish TEKIN bo'ladi!
+    summary += """
+🎁 <b>BEPUL XIZMAT!</b>
 
 ✅ Boshlaysizmi?
 """
-    else:
-        summary += f"""
-💰 <b>To'lov:</b>
-Narx: {total_price:,.0f} so'm ({page_count} × {price_per_page:,.0f})
-Balansingiz: {balance:,.0f} so'm
-"""
-        if balance >= total_price:
-            summary += f"Qoladi: {(balance - total_price):,.0f} so'm\n\n✅ Boshlaysizmi?"
-        else:
-            summary += f"""
-❌ <b>Balans yetarli emas!</b>
-Yetishmayotgan: {(total_price - balance):,.0f} so'm
 
-Balansni to'ldiring: 💳 To'ldirish
-"""
-            await message.answer(summary, parse_mode='HTML', reply_markup=main_menu_keyboard())
-            await state.finish()
-            return
-
-    await state.update_data(total_price=total_price)
     await message.answer(summary, reply_markup=confirm_keyboard(), parse_mode='HTML')
     await CourseWorkStates.confirming_creation.set()
 
 
 # ==================== TASDIQLASH ====================
+#
+# @dp.message_handler(Text(equals="✅ Ha, boshlash"), state=CourseWorkStates.confirming_creation)
+# async def course_work_confirm(message: types.Message, state: FSMContext):
+#     """Mustaqil ish yaratishni tasdiqlash"""
+#     telegram_id = message.from_user.id
+#     user_data = await state.get_data()
+#
+#     try:
+#         work_type = user_data.get('work_type')
+#         work_name = user_data.get('work_name')
+#         topic = user_data.get('topic')
+#         subject = user_data.get('subject')
+#         details = user_data.get('details', '')
+#         page_count = user_data.get('page_count')
+#         file_format = user_data.get('file_format')
+#         format_name = user_data.get('format_name')
+#         language = user_data.get('language')
+#         language_name = user_data.get('language_name')
+#         total_price = user_data.get('total_price', 0)
+#
+#         free_left = user_db.get_free_presentations(telegram_id)
+#         is_free = free_left > 0
+#
+#         if is_free:
+#             logger.info(f"🎁 BEPUL {work_name}: User {telegram_id}")
+#             user_db.use_free_presentation(telegram_id)
+#             new_free = user_db.get_free_presentations(telegram_id)
+#             amount_charged = 0
+#
+#             success_text = f"""
+# 🎁 <b>BEPUL {work_name} yaratish boshlandi!</b>
+#
+# ✨ Bu sizning bepul ishingiz!
+# 🎁 Qolgan bepul: {new_free} ta
+#
+# ⏳ <b>Jarayon:</b>
+# 1️⃣ ⚙️ Matn tayyorlanmoqda...
+# 2️⃣ ⏸ Formatlash
+# 3️⃣ ⏸ {format_name} yaratish
+# 4️⃣ ⏸ Tayyor!
+#
+# ⏱️ Taxminan <b>5-10 daqiqa</b> vaqt ketadi.
+# """
+#         else:
+#             current_balance = user_db.get_user_balance(telegram_id)
+#
+#             if current_balance < total_price:
+#                 await message.answer(
+#                     f"❌ <b>Balans yetarli emas!</b>\n\n"
+#                     f"Kerakli: {total_price:,.0f} so'm\n"
+#                     f"Sizda: {current_balance:,.0f} so'm",
+#                     parse_mode='HTML',
+#                     reply_markup=main_menu_keyboard()
+#                 )
+#                 await state.finish()
+#                 return
+#
+#             success = user_db.deduct_from_balance(telegram_id, total_price)
+#
+#             if not success:
+#                 await message.answer("❌ Balansdan yechishda xatolik!", parse_mode='HTML',
+#                                      reply_markup=main_menu_keyboard())
+#                 await state.finish()
+#                 return
+#
+#             new_balance = user_db.get_user_balance(telegram_id)
+#
+#             user_db.create_transaction(
+#                 telegram_id=telegram_id,
+#                 transaction_type='withdrawal',
+#                 amount=total_price,
+#                 description=f'{work_name} yaratish ({page_count} sahifa)',
+#                 status='approved'
+#             )
+#
+#             amount_charged = total_price
+#
+#             success_text = f"""
+# ✅ <b>{work_name} yaratish boshlandi!</b>
+#
+# 💰 Balansdan yechildi: {total_price:,.0f} so'm
+# 💳 Yangi balans: {new_balance:,.0f} so'm
+#
+# ⏳ <b>Jarayon:</b>
+# 1️⃣ ⚙️ Matn tayyorlanmoqda...
+# 2️⃣ ⏸ Formatlash
+# 3️⃣ ⏸ {format_name} yaratish
+# 4️⃣ ⏸ Tayyor!
+#
+# ⏱️ Taxminan <b>5-10 daqiqa</b> vaqt ketadi.
+# """
+#
+#         task_uuid = str(uuid.uuid4())
+#         content_data = {
+#             'work_type': work_type,
+#             'work_name': work_name,
+#             'topic': topic,
+#             'subject': subject,
+#             'details': details,
+#             'page_count': page_count,
+#             'file_format': file_format,
+#             'language': language,
+#             'language_name': language_name
+#         }
+#
+#         task_id = user_db.create_presentation_task(
+#             telegram_id=telegram_id,
+#             task_uuid=task_uuid,
+#             presentation_type='course_work',
+#             slide_count=page_count,
+#             answers=json.dumps(content_data, ensure_ascii=False),
+#             amount_charged=amount_charged
+#         )
+#
+#         if not task_id:
+#             if not is_free:
+#                 user_db.add_to_balance(telegram_id, total_price)
+#             await message.answer("❌ Task yaratishda xatolik!", parse_mode='HTML')
+#             await state.finish()
+#             return
+#
+#         await message.answer(success_text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
+#         await state.finish()
+#
+#         logger.info(f"✅ {work_name} task yaratildi: {task_uuid} | User: {telegram_id} | Free: {is_free}")
+#
+#     except Exception as e:
+#         logger.error(f"❌ Course work confirm xato: {e}")
+#         await message.answer("❌ Xatolik yuz berdi!", parse_mode='HTML', reply_markup=main_menu_keyboard())
+#         await state.finish()
+
 @dp.message_handler(Text(equals="✅ Ha, boshlash"), state=CourseWorkStates.confirming_creation)
 async def course_work_confirm(message: types.Message, state: FSMContext):
     """Mustaqil ish yaratishni tasdiqlash"""
@@ -489,70 +697,11 @@ async def course_work_confirm(message: types.Message, state: FSMContext):
         format_name = user_data.get('format_name')
         language = user_data.get('language')
         language_name = user_data.get('language_name')
-        total_price = user_data.get('total_price', 0)
 
-        free_left = user_db.get_free_presentations(telegram_id)
-        is_free = free_left > 0
+        success_text = f"""
+🎁 <b>{work_name} yaratish boshlandi!</b>
 
-        if is_free:
-            logger.info(f"🎁 BEPUL {work_name}: User {telegram_id}")
-            user_db.use_free_presentation(telegram_id)
-            new_free = user_db.get_free_presentations(telegram_id)
-            amount_charged = 0
-
-            success_text = f"""
-🎁 <b>BEPUL {work_name} yaratish boshlandi!</b>
-
-✨ Bu sizning bepul ishingiz!
-🎁 Qolgan bepul: {new_free} ta
-
-⏳ <b>Jarayon:</b>
-1️⃣ ⚙️ Matn tayyorlanmoqda...
-2️⃣ ⏸ Formatlash
-3️⃣ ⏸ {format_name} yaratish
-4️⃣ ⏸ Tayyor!
-
-⏱️ Taxminan <b>5-10 daqiqa</b> vaqt ketadi.
-"""
-        else:
-            current_balance = user_db.get_user_balance(telegram_id)
-
-            if current_balance < total_price:
-                await message.answer(
-                    f"❌ <b>Balans yetarli emas!</b>\n\n"
-                    f"Kerakli: {total_price:,.0f} so'm\n"
-                    f"Sizda: {current_balance:,.0f} so'm",
-                    parse_mode='HTML',
-                    reply_markup=main_menu_keyboard()
-                )
-                await state.finish()
-                return
-
-            success = user_db.deduct_from_balance(telegram_id, total_price)
-
-            if not success:
-                await message.answer("❌ Balansdan yechishda xatolik!", parse_mode='HTML',
-                                     reply_markup=main_menu_keyboard())
-                await state.finish()
-                return
-
-            new_balance = user_db.get_user_balance(telegram_id)
-
-            user_db.create_transaction(
-                telegram_id=telegram_id,
-                transaction_type='withdrawal',
-                amount=total_price,
-                description=f'{work_name} yaratish ({page_count} sahifa)',
-                status='approved'
-            )
-
-            amount_charged = total_price
-
-            success_text = f"""
-✅ <b>{work_name} yaratish boshlandi!</b>
-
-💰 Balansdan yechildi: {total_price:,.0f} so'm
-💳 Yangi balans: {new_balance:,.0f} so'm
+✨ Bu xizmat BEPUL!
 
 ⏳ <b>Jarayon:</b>
 1️⃣ ⚙️ Matn tayyorlanmoqda...
@@ -582,12 +731,10 @@ async def course_work_confirm(message: types.Message, state: FSMContext):
             presentation_type='course_work',
             slide_count=page_count,
             answers=json.dumps(content_data, ensure_ascii=False),
-            amount_charged=amount_charged
+            amount_charged=0
         )
 
         if not task_id:
-            if not is_free:
-                user_db.add_to_balance(telegram_id, total_price)
             await message.answer("❌ Task yaratishda xatolik!", parse_mode='HTML')
             await state.finish()
             return
@@ -595,7 +742,7 @@ async def course_work_confirm(message: types.Message, state: FSMContext):
         await message.answer(success_text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
         await state.finish()
 
-        logger.info(f"✅ {work_name} task yaratildi: {task_uuid} | User: {telegram_id} | Free: {is_free}")
+        logger.info(f"✅ BEPUL {work_name} task yaratildi: {task_uuid} | User: {telegram_id}")
 
     except Exception as e:
         logger.error(f"❌ Course work confirm xato: {e}")

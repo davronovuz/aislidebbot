@@ -1019,31 +1019,11 @@ class UserDatabase(Database):
         )
         return result[0] if result else 0
 
-
-
     def get_free_presentations(self, telegram_id: int) -> int:
         """
-        Foydalanuvchining bepul prezentatsiya qoldig'ini olish
-
-        Returns:
-            int: Qolgan bepul prezentatsiyalar soni (default: 2)
+        Har doim 0 qaytaradi - bepul prezentatsiya o'chirilgan
         """
-        try:
-            result = self.execute(
-                "SELECT free_presentations FROM Users WHERE telegram_id = ?",
-                parameters=(telegram_id,),
-                fetchone=True
-            )
-
-            if result and result[0] is not None:
-                return int(result[0])
-
-            # Agar ustun yo'q yoki NULL bo'lsa, 2 qaytarish
-            return 2
-
-        except Exception as e:
-            print(f"❌ get_free_presentations xato: {e}")
-            return 0
+        return 0
 
     def use_free_presentation(self, telegram_id: int) -> bool:
         """
