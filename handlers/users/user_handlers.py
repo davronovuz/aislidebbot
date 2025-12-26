@@ -596,7 +596,7 @@ async def presentation_details(message: types.Message, state: FSMContext):
 🔢 <b>Slaydlar sonini kiriting:</b>
 
 Minimal: 5 slayd
-Maksimal: 20 slayd
+Maksimal: 15 slayd
 
 Masalan: 10
 """
@@ -618,8 +618,8 @@ async def presentation_slide_count(message: types.Message, state: FSMContext):
     try:
         slide_count = int(message.text.strip())
 
-        if slide_count < 5 or slide_count > 20:
-            await message.answer("❌ Slaydlar soni 5 dan 20 gacha bo'lishi kerak!")
+        if slide_count < 5 or slide_count > 15:
+            await message.answer("❌ Slaydlar soni 5 dan 15 gacha bo'lishi kerak!")
             return
 
         user_data = await state.get_data()
