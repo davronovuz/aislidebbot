@@ -48,6 +48,120 @@ PITCH_QUESTIONS = [
 ]
 
 
+# ==================== WEB APP DATA HANDLER (BIRINCHI!) ====================
+@dp.message_handler(content_types=['web_app_data'])
+async def web_app_data_handler(message: types.Message):
+    """Web App dan kelgan ma'lumotni qayta ishlash"""
+    telegram_id = message.from_user.id
+
+    logger.info(f"📥 WEB APP DATA KELDI: {message.web_app_data.data}")
+
+    try:
+        data = json.loads(message.web_app_data.data)
+        logger.info(f"📥 Parsed: {data} | User: {telegram_id}")
+
+        topic = data.get('topic', '')
+        details = data.get('details', '')
+        slide_count = data.get('slide_count', 10)
+        theme_id = data.get('theme_id', 'chisel')
+        language = data.get('language', 'uz')
+
+        price_per_slide = user_db.get_price('slide_basic') or 1000
+        calculated_price = price_per_slide * slide_count
+
+        theme = get_theme_by_id(theme_id)
+        theme_name = theme['name'] if theme else theme_id
+
+        free_left = user_db.get_free_presentations(telegram_id)
+        is_free = free_left > 0
+
+        if is_free:
+            user_db.use_free_presentation(telegram_id)
+            new_free = user_db.get_free_presentations(telegram_id)
+            amount_charged = 0
+
+            success_text = f"""
+🎁 <b>BEPUL Prezentatsiya yaratish boshlandi!</b>
+
+📝 <b>Mavzu:</b> {topic}
+📊 <b>Slaydlar:</b> {slide_count} ta
+🎨 <b>Dizayn:</b> {theme_name}
+
+🎁 Qolgan bepul: {new_free} ta
+⏳ Tayyor bo'lish: <b>3-7 daqiqa</b>
+"""
+        else:
+            current_balance = user_db.get_user_balance(telegram_id)
+
+            if current_balance < calculated_price:
+                await message.answer(
+                    f"❌ <b>Balans yetarli emas!</b>\n\n"
+                    f"💰 Kerakli: {calculated_price:,.0f} so'm\n"
+                    f"💳 Sizda: {current_balance:,.0f} so'm",
+                    parse_mode='HTML',
+                    reply_markup=main_menu_keyboard()
+                )
+                return
+
+            success = user_db.deduct_from_balance(telegram_id, calculated_price)
+            if not success:
+                await message.answer("❌ Balansdan yechishda xatolik!", reply_markup=main_menu_keyboard())
+                return
+
+            new_balance = user_db.get_user_balance(telegram_id)
+            amount_charged = calculated_price
+
+            user_db.create_transaction(
+                telegram_id=telegram_id,
+                transaction_type='withdrawal',
+                amount=calculated_price,
+                description=f'Prezentatsiya ({slide_count} slayd)',
+                status='approved'
+            )
+
+            success_text = f"""
+✅ <b>Prezentatsiya yaratish boshlandi!</b>
+
+📝 <b>Mavzu:</b> {topic}
+📊 <b>Slaydlar:</b> {slide_count} ta
+🎨 <b>Dizayn:</b> {theme_name}
+
+💰 Yechildi: {calculated_price:,.0f} so'm
+💳 Qoldi: {new_balance:,.0f} so'm
+⏳ Tayyor bo'lish: <b>3-7 daqiqa</b>
+"""
+
+        task_uuid = str(uuid.uuid4())
+        content_data = {
+            'topic': topic,
+            'details': details,
+            'slide_count': slide_count,
+            'theme_id': theme_id,
+            'language': language
+        }
+
+        task_id = user_db.create_presentation_task(
+            telegram_id=telegram_id,
+            task_uuid=task_uuid,
+            presentation_type='basic',
+            slide_count=slide_count,
+            answers=json.dumps(content_data, ensure_ascii=False),
+            amount_charged=amount_charged
+        )
+
+        if not task_id:
+            if not is_free and amount_charged > 0:
+                user_db.add_to_balance(telegram_id, amount_charged)
+            await message.answer("❌ Task yaratishda xatolik!", reply_markup=main_menu_keyboard())
+            return
+
+        await message.answer(success_text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
+        logger.info(f"✅ Task yaratildi: {task_uuid} | User: {telegram_id}")
+
+    except Exception as e:
+        logger.error(f"❌ Web App xato: {e}")
+        await message.answer(f"❌ Xatolik yuz berdi!", reply_markup=main_menu_keyboard())
+
 # ==================== ADMIN NOTIFICATION ====================
 async def send_admin_notification(trans_id: int, user_id: int, amount: float, file_id: str, user_name: str):
     """Admin'larga tranzaksiya haqida xabar yuborish"""
