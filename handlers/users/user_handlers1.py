@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 # ==================== WEB APP URL ====================
 WEB_APP_URL = "https://ai-slayd-prezentatsiya-front.vercel.app"
 
+logger.info(f"✅ user_handlers1.py YUKLANDI! WEB_APP_URL: {WEB_APP_URL}")
+
 
 # ==================== FSM STATES ====================
 class PitchDeckStates(StatesGroup):
@@ -48,37 +50,63 @@ PITCH_QUESTIONS = [
 ]
 
 
-# ==================== WEB APP DATA HANDLER (BIRINCHI!) ====================
+# ==================== WEB APP DATA HANDLER ====================
 @dp.message_handler(content_types=['web_app_data'])
 async def web_app_data_handler(message: types.Message):
     """Web App dan kelgan ma'lumotni qayta ishlash"""
-    telegram_id = message.from_user.id
 
-    logger.info(f"📥 WEB APP DATA KELDI: {message.web_app_data.data}")
+    print("=" * 50)
+    print("🔥 WEB APP DATA HANDLER ISHLADI!")
+    print("=" * 50)
+
+    logger.info("=" * 50)
+    logger.info("🔥 WEB APP DATA HANDLER CHAQIRILDI!")
+    logger.info("=" * 50)
+
+    telegram_id = message.from_user.id
+    logger.info(f"📥 User ID: {telegram_id}")
+    logger.info(f"📥 Raw data: {message.web_app_data.data}")
 
     try:
+        # JSON parse
         data = json.loads(message.web_app_data.data)
-        logger.info(f"📥 Parsed: {data} | User: {telegram_id}")
+        logger.info(f"📥 Parsed JSON: {data}")
 
+        # Ma'lumotlarni olish
         topic = data.get('topic', '')
         details = data.get('details', '')
         slide_count = data.get('slide_count', 10)
         theme_id = data.get('theme_id', 'chisel')
         language = data.get('language', 'uz')
 
+        logger.info(f"📝 Topic: {topic}")
+        logger.info(f"📝 Details: {details}")
+        logger.info(f"📝 Slide count: {slide_count}")
+        logger.info(f"📝 Theme ID: {theme_id}")
+        logger.info(f"📝 Language: {language}")
+
+        # Narx hisoblash
         price_per_slide = user_db.get_price('slide_basic') or 1000
         calculated_price = price_per_slide * slide_count
+        logger.info(f"💰 Price per slide: {price_per_slide}")
+        logger.info(f"💰 Total price: {calculated_price}")
 
+        # Theme olish
         theme = get_theme_by_id(theme_id)
         theme_name = theme['name'] if theme else theme_id
+        logger.info(f"🎨 Theme name: {theme_name}")
 
+        # Bepul tekshirish
         free_left = user_db.get_free_presentations(telegram_id)
         is_free = free_left > 0
+        logger.info(f"🎁 Free left: {free_left}, Is free: {is_free}")
 
         if is_free:
+            logger.info("🎁 BEPUL prezentatsiya ishlatilmoqda...")
             user_db.use_free_presentation(telegram_id)
             new_free = user_db.get_free_presentations(telegram_id)
             amount_charged = 0
+            logger.info(f"🎁 Bepul ishlatildi. Qoldi: {new_free}")
 
             success_text = f"""
 🎁 <b>BEPUL Prezentatsiya yaratish boshlandi!</b>
@@ -91,9 +119,12 @@ async def web_app_data_handler(message: types.Message):
 ⏳ Tayyor bo'lish: <b>3-7 daqiqa</b>
 """
         else:
+            # Balans tekshirish
             current_balance = user_db.get_user_balance(telegram_id)
+            logger.info(f"💳 Current balance: {current_balance}")
 
             if current_balance < calculated_price:
+                logger.warning(f"❌ Balans yetarli emas! Kerak: {calculated_price}, Bor: {current_balance}")
                 await message.answer(
                     f"❌ <b>Balans yetarli emas!</b>\n\n"
                     f"💰 Kerakli: {calculated_price:,.0f} so'm\n"
@@ -103,14 +134,22 @@ async def web_app_data_handler(message: types.Message):
                 )
                 return
 
+            # Balansdan yechish
+            logger.info(f"💰 Balansdan yechish: {calculated_price}")
             success = user_db.deduct_from_balance(telegram_id, calculated_price)
+            logger.info(f"💰 Yechish natijasi: {success}")
+
             if not success:
+                logger.error("❌ Balansdan yechishda xatolik!")
                 await message.answer("❌ Balansdan yechishda xatolik!", reply_markup=main_menu_keyboard())
                 return
 
             new_balance = user_db.get_user_balance(telegram_id)
             amount_charged = calculated_price
+            logger.info(f"💳 Yangi balans: {new_balance}")
 
+            # Transaction yaratish
+            logger.info("📝 Transaction yaratilmoqda...")
             user_db.create_transaction(
                 telegram_id=telegram_id,
                 transaction_type='withdrawal',
@@ -118,6 +157,7 @@ async def web_app_data_handler(message: types.Message):
                 description=f'Prezentatsiya ({slide_count} slayd)',
                 status='approved'
             )
+            logger.info("✅ Transaction yaratildi")
 
             success_text = f"""
 ✅ <b>Prezentatsiya yaratish boshlandi!</b>
@@ -131,7 +171,10 @@ async def web_app_data_handler(message: types.Message):
 ⏳ Tayyor bo'lish: <b>3-7 daqiqa</b>
 """
 
+        # Task yaratish
         task_uuid = str(uuid.uuid4())
+        logger.info(f"📋 Task UUID: {task_uuid}")
+
         content_data = {
             'topic': topic,
             'details': details,
@@ -139,7 +182,9 @@ async def web_app_data_handler(message: types.Message):
             'theme_id': theme_id,
             'language': language
         }
+        logger.info(f"📋 Content data: {content_data}")
 
+        logger.info("📋 Task yaratilmoqda...")
         task_id = user_db.create_presentation_task(
             telegram_id=telegram_id,
             task_uuid=task_uuid,
@@ -148,23 +193,38 @@ async def web_app_data_handler(message: types.Message):
             answers=json.dumps(content_data, ensure_ascii=False),
             amount_charged=amount_charged
         )
+        logger.info(f"📋 Task ID: {task_id}")
 
         if not task_id:
+            logger.error("❌ Task yaratishda xatolik!")
             if not is_free and amount_charged > 0:
+                logger.info("💰 Pul qaytarilmoqda...")
                 user_db.add_to_balance(telegram_id, amount_charged)
             await message.answer("❌ Task yaratishda xatolik!", reply_markup=main_menu_keyboard())
             return
 
+        # Muvaffaqiyatli xabar
+        logger.info("📤 Muvaffaqiyat xabari yuborilmoqda...")
         await message.answer(success_text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
-        logger.info(f"✅ Task yaratildi: {task_uuid} | User: {telegram_id}")
+        logger.info(f"✅ TASK YARATILDI: {task_uuid} | User: {telegram_id}")
+        print(f"✅ TASK YARATILDI: {task_uuid}")
+
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ JSON parse xato: {e}")
+        print(f"❌ JSON parse xato: {e}")
+        await message.answer("❌ Ma'lumotlarni o'qishda xatolik!", reply_markup=main_menu_keyboard())
 
     except Exception as e:
-        logger.error(f"❌ Web App xato: {e}")
-        await message.answer(f"❌ Xatolik yuz berdi!", reply_markup=main_menu_keyboard())
+        logger.error(f"❌ Web App handler XATO: {e}")
+        logger.exception("Full traceback:")
+        print(f"❌ Web App handler XATO: {e}")
+        await message.answer(f"❌ Xatolik yuz berdi: {str(e)}", reply_markup=main_menu_keyboard())
+
 
 # ==================== ADMIN NOTIFICATION ====================
 async def send_admin_notification(trans_id: int, user_id: int, amount: float, file_id: str, user_name: str):
     """Admin'larga tranzaksiya haqida xabar yuborish"""
+    logger.info(f"📢 Admin notification: trans_id={trans_id}, user_id={user_id}, amount={amount}")
     try:
         keyboard = InlineKeyboardMarkup(row_width=2)
         keyboard.add(
@@ -186,14 +246,11 @@ async def send_admin_notification(trans_id: int, user_id: int, amount: float, fi
         for admin_id in ADMINS:
             try:
                 await bot.send_message(admin_id, user_info, reply_markup=keyboard, parse_mode='HTML')
-
                 try:
                     await bot.send_photo(admin_id, file_id)
                 except:
                     await bot.send_document(admin_id, file_id)
-
-                logger.info(f"✅ Admin notification yuborildi: Admin {admin_id}, Trans {trans_id}")
-
+                logger.info(f"✅ Admin notification yuborildi: Admin {admin_id}")
             except Exception as e:
                 logger.error(f"❌ Admin {admin_id} ga xabar yuborishda xato: {e}")
 
@@ -204,6 +261,8 @@ async def send_admin_notification(trans_id: int, user_id: int, amount: float, fi
 # ==================== START ====================
 @dp.message_handler(commands=['start'], state='*')
 async def start_handler(message: types.Message, state: FSMContext):
+    logger.info(f"🚀 /start: User {message.from_user.id}")
+
     current_state = await state.get_state()
     if current_state:
         await state.finish()
@@ -244,16 +303,44 @@ Pastdagi tugmalardan birini tanlang! 👇
 """
 
         await message.answer(welcome_text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
+        logger.info(f"✅ Start handler tugadi: User {telegram_id}")
 
     except Exception as e:
         logger.error(f"❌ Start handler xato: {e}")
         await message.answer("❌ Xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.")
 
 
+# ==================== PREZENTATSIYA (WEB APP) ====================
+@dp.message_handler(Text(equals="📊 Prezentatsiya"), state='*')
+async def presentation_webapp(message: types.Message, state: FSMContext):
+    """Web App orqali prezentatsiya yaratish"""
+    logger.info(f"📊 Prezentatsiya tugmasi bosildi: User {message.from_user.id}")
+
+    current_state = await state.get_state()
+    if current_state:
+        await state.finish()
+        logger.info("State tozalandi")
+
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(
+        InlineKeyboardButton(
+            text="🎨 Prezentatsiya yaratish",
+            web_app=WebAppInfo(url=WEB_APP_URL)
+        )
+    )
+
+    await message.answer(
+        "📊 Prezentatsiya yaratish uchun tugmani bosing:",
+        reply_markup=keyboard
+    )
+    logger.info(f"✅ Web App tugmasi yuborildi: {WEB_APP_URL}")
+
+
 # ==================== PITCH DECK ====================
 @dp.message_handler(Text(equals="🎯 Pitch Deck"), state='*')
 async def pitch_deck_start(message: types.Message, state: FSMContext):
     telegram_id = message.from_user.id
+    logger.info(f"🎯 Pitch Deck: User {telegram_id}")
 
     try:
         price = user_db.get_price('pitch_deck')
@@ -311,6 +398,7 @@ Avval balansni to'ldiring: 💳 To'ldirish
 @dp.message_handler(Text(equals="✅ Ha, boshlash"), state=PitchDeckStates.confirming_creation)
 async def pitch_deck_confirm(message: types.Message, state: FSMContext):
     user_data = await state.get_data()
+    logger.info(f"✅ Ha, boshlash: User {message.from_user.id}")
 
     try:
         if 'answers' not in user_data or not user_data.get('answers'):
@@ -337,11 +425,9 @@ Qancha ko'p ma'lumot bersangiz, shuncha yaxshi natija!
             is_free = free_left > 0
 
             if is_free:
-                logger.info(f"🎁 BEPUL Pitch Deck: User {telegram_id}, Qolgan: {free_left}")
-
+                logger.info(f"🎁 BEPUL Pitch Deck: User {telegram_id}")
                 user_db.use_free_presentation(telegram_id)
                 new_free = user_db.get_free_presentations(telegram_id)
-
                 amount_charged = 0
 
                 success_text = f"""
@@ -350,26 +436,16 @@ Qancha ko'p ma'lumot bersangiz, shuncha yaxshi natija!
 ✨ Bu sizning bepul prezentatsiyangiz!
 🎁 Qolgan bepul: {new_free} ta
 
-⏳ <b>Jarayon:</b>
-1. ⚙️ Content yaratilmoqda...
-2. 🎨 Dizayn qilinmoqda...
-3. 📊 Formatlash...
-4. ✅ Tayyor!
-
 ⏱️ Taxminan <b>3-7 daqiqa</b> vaqt ketadi.
-
-Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
 """
             else:
                 current_balance = user_db.get_user_balance(telegram_id)
-                logger.info(f"📊 Pitch Deck: User {telegram_id}, Balans: {current_balance}, Narx: {price}")
 
                 if current_balance < price:
                     await message.answer(
                         f"❌ <b>Balans yetarli emas!</b>\n\n"
                         f"Kerakli: {price:,.0f} so'm\n"
-                        f"Sizda: {current_balance:,.0f} so'm\n\n"
-                        f"Balansni to'ldiring: 💳 To'ldirish",
+                        f"Sizda: {current_balance:,.0f} so'm",
                         parse_mode='HTML',
                         reply_markup=main_menu_keyboard()
                     )
@@ -377,20 +453,12 @@ Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
                     return
 
                 success = user_db.deduct_from_balance(telegram_id, price)
-                logger.info(f"💰 Balansdan yechish natijasi: {success}")
-
                 if not success:
-                    await message.answer(
-                        "❌ <b>Balansdan yechishda xatolik!</b>\n\nBalansni tekshiring: 💰 Balansim",
-                        parse_mode='HTML',
-                        reply_markup=main_menu_keyboard()
-                    )
+                    await message.answer("❌ Balansdan yechishda xatolik!", reply_markup=main_menu_keyboard())
                     await state.finish()
                     return
 
                 new_balance = user_db.get_user_balance(telegram_id)
-                logger.info(f"✅ Yangi balans: {new_balance}")
-
                 user_db.create_transaction(
                     telegram_id=telegram_id,
                     transaction_type='withdrawal',
@@ -398,7 +466,6 @@ Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
                     description='Pitch Deck yaratish',
                     status='approved'
                 )
-
                 amount_charged = price
 
                 success_text = f"""
@@ -407,15 +474,7 @@ Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
 💰 Balansdan yechildi: {price:,.0f} so'm
 💳 Yangi balans: {new_balance:,.0f} so'm
 
-⏳ <b>Jarayon:</b>
-1. ⚙️ Content yaratilmoqda...
-2. 🎨 Dizayn qilinmoqda...
-3. 📊 Formatlash...
-4. ✅ Tayyor!
-
 ⏱️ Taxminan <b>3-7 daqiqa</b> vaqt ketadi.
-
-Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
 """
 
             task_uuid = str(uuid.uuid4())
@@ -439,19 +498,16 @@ Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
 
             await message.answer(success_text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
             await state.finish()
-
-            logger.info(f"✅ Pitch Deck task yaratildi: {task_uuid} | User: {telegram_id} | Free: {is_free}")
+            logger.info(f"✅ Pitch Deck task: {task_uuid}")
 
     except Exception as e:
         logger.error(f"❌ Pitch deck confirm xato: {e}")
-        await message.answer("❌ <b>Xatolik yuz berdi!</b>", parse_mode='HTML')
+        await message.answer("❌ Xatolik yuz berdi!", parse_mode='HTML')
         await state.finish()
 
 
 @dp.message_handler(state=PitchDeckStates.waiting_for_answer)
 async def pitch_deck_answer(message: types.Message, state: FSMContext):
-    """Pitch Deck savollariga javoblarni qabul qilish"""
-
     if message.text == "❌ Bekor qilish":
         await state.finish()
         await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
@@ -472,211 +528,27 @@ async def pitch_deck_answer(message: types.Message, state: FSMContext):
         await state.update_data(answers=answers)
         price = user_data.get('price', 50000)
         balance = user_db.get_user_balance(message.from_user.id)
-
         free_left = user_db.get_free_presentations(message.from_user.id)
 
-        summary = f"""
-🎉 <b>Barcha savollar tugadi!</b>
-
-📊 Jami {len(answers)} ta javob qabul qilindi
-"""
+        summary = f"🎉 <b>Barcha savollar tugadi!</b>\n\n📊 Jami {len(answers)} ta javob qabul qilindi\n"
 
         if free_left > 0:
-            summary += f"""
-🎁 <b>BEPUL!</b>
-Sizda {free_left} ta bepul prezentatsiya bor.
-Bu Pitch Deck TEKIN bo'ladi!
-
-✅ Pitch Deck yaratishni boshlaymizmi?
-"""
+            summary += f"\n🎁 <b>BEPUL!</b> Bu Pitch Deck TEKIN bo'ladi!\n\n✅ Boshlaymizmi?"
         else:
-            summary += f"""
-💰 <b>To'lov ma'lumotlari:</b>
-Narx: {price:,.0f} so'm
-Balansingiz: {balance:,.0f} so'm
-Qoladi: {(balance - price):,.0f} so'm
-
-✅ Pitch Deck yaratishni boshlaymizmi?
-"""
+            summary += f"\n💰 Narx: {price:,.0f} so'm\n💳 Balans: {balance:,.0f} so'm\n\n✅ Boshlaymizmi?"
 
         await message.answer(summary, reply_markup=confirm_keyboard(), parse_mode='HTML')
         await PitchDeckStates.confirming_creation.set()
-
-
-# ==================== PREZENTATSIYA (WEB APP) ====================
-@dp.message_handler(Text(equals="📊 Prezentatsiya"), state='*')
-async def presentation_webapp(message: types.Message, state: FSMContext):
-    """Web App orqali prezentatsiya yaratish"""
-
-    current_state = await state.get_state()
-    if current_state:
-        await state.finish()
-
-    keyboard = InlineKeyboardMarkup()
-    keyboard.add(
-        InlineKeyboardButton(
-            text="🎨 Prezentatsiya yaratish",
-            web_app=WebAppInfo(url=WEB_APP_URL)
-        )
-    )
-
-    await message.answer(
-        "📊 Prezentatsiya yaratish uchun tugmani bosing:",
-        reply_markup=keyboard
-    )
-
-
-# ==================== WEB APP DATA HANDLER ====================
-@dp.message_handler(content_types=['web_app_data'])
-async def web_app_data_handler(message: types.Message):
-    """Web App dan kelgan ma'lumotni qayta ishlash"""
-    telegram_id = message.from_user.id
-
-    try:
-        data = json.loads(message.web_app_data.data)
-        logger.info(f"📥 Web App data: {data} | User: {telegram_id}")
-
-        topic = data.get('topic', '')
-        details = data.get('details', '')
-        slide_count = data.get('slide_count', 10)
-        theme_id = data.get('theme_id', 'chisel')
-        language = data.get('language', 'uz')
-
-        price_per_slide = user_db.get_price('slide_basic') or 2000
-        calculated_price = price_per_slide * slide_count
-
-        theme = get_theme_by_id(theme_id)
-        theme_name = theme['name'] if theme else theme_id.capitalize()
-
-        free_left = user_db.get_free_presentations(telegram_id)
-        is_free = free_left > 0
-
-        if is_free:
-            user_db.use_free_presentation(telegram_id)
-            new_free = user_db.get_free_presentations(telegram_id)
-            amount_charged = 0
-
-            logger.info(f"🎁 BEPUL: User {telegram_id}, Qoldi: {new_free}")
-
-            success_text = f"""
-🎁 <b>BEPUL Prezentatsiya yaratish boshlandi!</b>
-
-📝 <b>Mavzu:</b> {topic}
-📊 <b>Slaydlar:</b> {slide_count} ta
-🎨 <b>Dizayn:</b> {theme_name}
-🌐 <b>Til:</b> {language.upper()}
-
-✨ Bu sizning bepul prezentatsiyangiz!
-🎁 Qolgan bepul: {new_free} ta
-
-⏳ Tayyor bo'lish vaqti: <b>3-7 daqiqa</b>
-
-Tayyor bo'lgach sizga <b>PPTX fayl</b> yuboriladi! 🎉
-"""
-        else:
-            current_balance = user_db.get_user_balance(telegram_id)
-
-            if current_balance < calculated_price:
-                await message.answer(
-                    f"❌ <b>Balans yetarli emas!</b>\n\n"
-                    f"💰 Kerakli: {calculated_price:,.0f} so'm\n"
-                    f"💳 Sizda: {current_balance:,.0f} so'm\n"
-                    f"📉 Yetishmayapti: {(calculated_price - current_balance):,.0f} so'm\n\n"
-                    f"Balansni to'ldiring: 💳 To'ldirish",
-                    parse_mode='HTML',
-                    reply_markup=main_menu_keyboard()
-                )
-                return
-
-            success = user_db.deduct_from_balance(telegram_id, calculated_price)
-
-            if not success:
-                await message.answer(
-                    "❌ <b>Balansdan yechishda xatolik!</b>\n\nIltimos, qaytadan urinib ko'ring.",
-                    parse_mode='HTML',
-                    reply_markup=main_menu_keyboard()
-                )
-                return
-
-            new_balance = user_db.get_user_balance(telegram_id)
-            amount_charged = calculated_price
-
-            user_db.create_transaction(
-                telegram_id=telegram_id,
-                transaction_type='withdrawal',
-                amount=calculated_price,
-                description=f'Prezentatsiya ({slide_count} slayd)',
-                status='approved'
-            )
-
-            logger.info(f"💰 Balansdan yechildi: {calculated_price} | User: {telegram_id}")
-
-            success_text = f"""
-✅ <b>Prezentatsiya yaratish boshlandi!</b>
-
-📝 <b>Mavzu:</b> {topic}
-📊 <b>Slaydlar:</b> {slide_count} ta
-🎨 <b>Dizayn:</b> {theme_name}
-🌐 <b>Til:</b> {language.upper()}
-
-💰 Yechildi: {calculated_price:,.0f} so'm
-💳 Qoldi: {new_balance:,.0f} so'm
-
-⏳ Tayyor bo'lish vaqti: <b>3-7 daqiqa</b>
-
-Tayyor bo'lgach sizga <b>PPTX fayl</b> yuboriladi! 🎉
-"""
-
-        task_uuid = str(uuid.uuid4())
-
-        content_data = {
-            'topic': topic,
-            'details': details,
-            'slide_count': slide_count,
-            'theme_id': theme_id,
-            'language': language
-        }
-
-        task_id = user_db.create_presentation_task(
-            telegram_id=telegram_id,
-            task_uuid=task_uuid,
-            presentation_type='basic',
-            slide_count=slide_count,
-            answers=json.dumps(content_data, ensure_ascii=False),
-            amount_charged=amount_charged
-        )
-
-        if not task_id:
-            if not is_free and amount_charged > 0:
-                user_db.add_to_balance(telegram_id, amount_charged)
-            await message.answer(
-                "❌ <b>Task yaratishda xatolik!</b>",
-                parse_mode='HTML',
-                reply_markup=main_menu_keyboard()
-            )
-            return
-
-        await message.answer(success_text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
-
-        logger.info(f"✅ Task yaratildi: {task_uuid} | User: {telegram_id} | Free: {is_free} | Theme: {theme_id}")
-
-    except json.JSONDecodeError as e:
-        logger.error(f"❌ JSON parse xato: {e}")
-        await message.answer("❌ Ma'lumotlarni o'qishda xatolik!", reply_markup=main_menu_keyboard())
-
-    except Exception as e:
-        logger.error(f"❌ Web App handler xato: {e}")
-        await message.answer("❌ Xatolik yuz berdi!", reply_markup=main_menu_keyboard())
 
 
 # ==================== BALANS ====================
 @dp.message_handler(Text(equals="💰 Balansim"), state='*')
 async def balance_info(message: types.Message, state: FSMContext):
     telegram_id = message.from_user.id
+    logger.info(f"💰 Balansim: User {telegram_id}")
 
     try:
         stats = user_db.get_user_stats(telegram_id)
-
         if not stats:
             await message.answer("❌ Ma'lumot topilmadi!")
             return
@@ -693,7 +565,6 @@ async def balance_info(message: types.Message, state: FSMContext):
 📊 <b>Statistika:</b>
 📈 Jami to'ldirilgan: {stats['total_deposited']:,.0f} so'm
 📉 Jami sarflangan: {stats['total_spent']:,.0f} so'm
-📅 A'zo bo'lganingizga: {stats['member_since'][:10]}
 
 💳 <b>Oxirgi tranzaksiyalar:</b>
 """
@@ -702,7 +573,7 @@ async def balance_info(message: types.Message, state: FSMContext):
             for trans in transactions:
                 type_emoji = {'deposit': '➕', 'withdrawal': '➖', 'refund': '↩️'}.get(trans['type'], '❓')
                 status_emoji = {'pending': '⏳', 'approved': '✅', 'rejected': '❌'}.get(trans['status'], '❓')
-                info_text += f"\n{type_emoji} {trans['amount']:,.0f} so'm - {status_emoji} {trans['status']}"
+                info_text += f"\n{type_emoji} {trans['amount']:,.0f} so'm - {status_emoji}"
         else:
             info_text += "\nTranzaksiyalar yo'q"
 
@@ -710,11 +581,13 @@ async def balance_info(message: types.Message, state: FSMContext):
 
     except Exception as e:
         logger.error(f"❌ Balans info xato: {e}")
-        await message.answer("❌ Ma'lumotlarni olishda xatolik yuz berdi.")
+        await message.answer("❌ Xatolik yuz berdi.")
 
 
 @dp.message_handler(Text(equals="💳 To'ldirish"), state='*')
 async def balance_topup_start(message: types.Message, state: FSMContext):
+    logger.info(f"💳 To'ldirish: User {message.from_user.id}")
+
     text = """
 💳 <b>BALANS TO'LDIRISH</b>
 
@@ -764,10 +637,7 @@ async def balance_topup_amount(message: types.Message, state: FSMContext):
 👤 <b>Karta egasi:</b>
 {CARD_HOLDER}
 
-📸 <b>To'lov qilgandan keyin:</b>
-Chek (skrinshot yoki PDF) ni bu chatga yuboring
-
-⏳ Admin 5-30 daqiqada tasdiqlaydi
+📸 Chek yuboring!
 """
 
         await message.answer(payment_text, reply_markup=cancel_keyboard(), parse_mode='HTML')
@@ -782,14 +652,13 @@ async def balance_topup_receipt(message: types.Message, state: FSMContext):
     telegram_id = message.from_user.id
     user_data = await state.get_data()
     amount = user_data.get('amount')
+    logger.info(f"📸 Chek: User {telegram_id}, Amount {amount}")
 
     try:
         if message.content_type == 'photo':
             file_id = message.photo[-1].file_id
         else:
             file_id = message.document.file_id
-
-        logger.info(f"📥 Chek qabul qilindi: User {telegram_id}, Amount {amount}")
 
         trans_id = user_db.create_transaction(
             telegram_id=telegram_id,
@@ -800,10 +669,8 @@ async def balance_topup_receipt(message: types.Message, state: FSMContext):
             status='pending'
         )
 
-        logger.info(f"📝 Tranzaksiya yaratildi: ID={trans_id}")
-
         if not trans_id:
-            await message.answer("❌ Tranzaksiya yaratishda xatolik! Qaytadan urinib ko'ring.", parse_mode='HTML')
+            await message.answer("❌ Tranzaksiya yaratishda xatolik!")
             await state.finish()
             return
 
@@ -813,29 +680,22 @@ async def balance_topup_receipt(message: types.Message, state: FSMContext):
 💰 Summa: {amount:,.0f} so'm
 🆔 Tranzaksiya ID: {trans_id}
 
-⏳ Admin 5-30 daqiqada tasdiqlaydi
-
-Tasdiqlangach balansingizga avtomatik qo'shiladi! 💳
+⏳ Admin tasdiqlaydi
 """
 
         await message.answer(success_text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
-
-        user_name = message.from_user.full_name
-        await send_admin_notification(trans_id, telegram_id, amount, file_id, user_name)
-
-        logger.info(f"✅ Balans to'ldirish so'rovi yaratildi: ID {trans_id}, User {telegram_id}, Amount {amount}")
-
+        await send_admin_notification(trans_id, telegram_id, amount, file_id, message.from_user.full_name)
         await state.finish()
+        logger.info(f"✅ Tranzaksiya: {trans_id}")
 
     except Exception as e:
-        logger.error(f"❌ Balance receipt xato: {e}")
-        await message.answer("❌ <b>Xatolik yuz berdi!</b>", parse_mode='HTML')
+        logger.error(f"❌ Receipt xato: {e}")
+        await message.answer("❌ Xatolik yuz berdi!")
         await state.finish()
 
 
 @dp.message_handler(state=BalanceStates.waiting_for_receipt)
 async def balance_receipt_text_handler(message: types.Message, state: FSMContext):
-    """Chek o'rniga text kelganda"""
     if message.text == "❌ Bekor qilish":
         await state.finish()
         await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
@@ -848,10 +708,9 @@ async def balance_receipt_text_handler(message: types.Message, state: FSMContext
 @dp.message_handler(Text(equals="❌ Bekor qilish"), state='*')
 async def cancel_handler(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
-
     if current_state:
         await state.finish()
-        await message.answer("❌ Jarayon bekor qilindi", reply_markup=main_menu_keyboard())
+        await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
     else:
         await message.answer("Hozir hech narsa bajarilmayapti", reply_markup=main_menu_keyboard())
 
@@ -865,43 +724,37 @@ async def no_handler(message: types.Message, state: FSMContext):
 # ==================== NARXLAR ====================
 @dp.message_handler(Text(equals="💵 Narxlar"), state='*')
 async def prices_handler(message: types.Message):
+    logger.info(f"💵 Narxlar: User {message.from_user.id}")
     try:
         prices = user_db.get_all_prices()
-
         price_text = "💵 <b>XIZMATLAR NARXLARI</b>\n\n"
 
         for price in prices:
             if price['is_active']:
                 price_text += f"<b>{price['description']}</b>\n💰 {price['price']:,.0f} {price['currency']}\n━━━━━━━━━━━━━━━\n"
 
-        telegram_id = message.from_user.id
-        free_left = user_db.get_free_presentations(telegram_id)
-
+        free_left = user_db.get_free_presentations(message.from_user.id)
         if free_left > 0:
             price_text += f"\n🎁 <b>Sizda {free_left} ta BEPUL prezentatsiya bor!</b>"
 
         await message.answer(price_text, parse_mode='HTML')
 
     except Exception as e:
-        logger.error(f"❌ Prices handler xato: {e}")
-        await message.answer("❌ Narxlarni olishda xatolik yuz berdi.")
+        logger.error(f"❌ Prices xato: {e}")
+        await message.answer("❌ Xatolik yuz berdi.")
 
 
 # ==================== YORDAM ====================
 @dp.message_handler(Text(equals="ℹ️ Yordam"), state='*')
 async def help_handler(message: types.Message):
+    logger.info(f"ℹ️ Yordam: User {message.from_user.id}")
     help_text = """
 ℹ️ <b>YORDAM</b>
-
-<b>📋 Buyruqlar:</b>
-/start - Boshlash
-/help - Yordam
-
 
 <b>📊 Prezentatsiya:</b>
 1. "Prezentatsiya" tugmasini bosing
 2. Web App ochiladi
-3. Mavzu, slayd soni, dizayn tanlang
+3. Ma'lumotlarni kiriting
 4. "Yaratish" tugmasini bosing
 5. 3-7 daqiqada tayyor!
 
@@ -909,17 +762,15 @@ async def help_handler(message: types.Message):
 1. Summani kiriting
 2. Kartaga o'tkazing
 3. Chek yuboring
-4. Admin tasdiqlaydi (5-30 daqiqa)
+4. Admin tasdiqlaydi
 
-<b>🎁 Bepul prezentatsiya:</b>
-Har bir yangi user 1 ta bepul prezentatsiya oladi!
-
-<b>🤖 Professional AI:</b>
-- AI content yaratadi
-- Professional dizayn
-- PPTX format
+🎁 Har bir yangi user 1 ta bepul prezentatsiya oladi!
 
 ❓ Savol: @dostonbek_musurmonov
 """
-
     await message.answer(help_text, parse_mode='HTML')
+
+
+# Fayl yuklanganda log
+logger.info("✅ user_handlers1.py TO'LIQ YUKLANDI!")
+print("✅ user_handlers1.py TO'LIQ YUKLANDI!")
