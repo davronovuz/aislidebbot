@@ -16,7 +16,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import bot va dispatcher
-from loader import dp, bot, user_db
+from loader import dp, bot, user_db,channel_db
 
 # Import utilities
 from utils.content_generator import ContentGenerator
@@ -51,6 +51,7 @@ async def on_startup(dispatcher):
         user_db.create_table_pricing()
         user_db.create_table_presentation_tasks()
         user_db.create_business_plans_table()
+        channel_db.create_table_channels()
         logger.info("✅ Database jadvallari tayyor")
     except Exception as e:
         logger.error(f"❌ Database xato: {e}")
