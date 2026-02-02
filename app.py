@@ -72,7 +72,7 @@ async def on_startup(dispatcher):
     logger.info("✅ BOT TAYYOR!")
     logger.info("=" * 50)
 
-    await dispatcher.middleware.setup(SubscriptionMiddleware())
+    dispatcher.middleware.setup(SubscriptionMiddleware())
     logger.info("✅ Majburiy obuna (Middleware) ulandi")
 
 
