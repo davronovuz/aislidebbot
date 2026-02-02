@@ -2,7 +2,7 @@ import asyncio
 import logging
 from aiogram import executor
 from environs import Env
-from middlewares.subscription import SubscriptionMiddleware
+from middlewares.checksub import SubscriptionMiddleware
 
 # Environment variables
 env = Env()
