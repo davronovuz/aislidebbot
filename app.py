@@ -2,6 +2,7 @@ import asyncio
 import logging
 from aiogram import executor
 from environs import Env
+from middlewares.subscription import SubscriptionMiddleware
 
 # Environment variables
 env = Env()
@@ -70,6 +71,9 @@ async def on_startup(dispatcher):
     logger.info("=" * 50)
     logger.info("✅ BOT TAYYOR!")
     logger.info("=" * 50)
+
+    await dispatcher.middleware.setup(SubscriptionMiddleware())
+    logger.info("✅ Majburiy obuna (Middleware) ulandi")
 
 
 async def on_shutdown(dispatcher):
