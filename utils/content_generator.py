@@ -14,10 +14,7 @@ class ContentGenerator:
     """
 
     def __init__(self, api_key: str):
-        self.client = AsyncOpenAI(
-            api_key=api_key,
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
-        )
+        self.client = AsyncOpenAI(api_key=api_key)
 
     async def generate_pitch_deck_content(
             self,
@@ -34,7 +31,7 @@ class ContentGenerator:
         Returns:
             Professional pitch content (JSON)
         """
-        model = "gemini-2.0-flash" if use_gpt4 else "gemini-2.0-flash"
+        model = "gpt-4" if use_gpt4 else "gpt-3.5-turbo"
 
         # Avval bozor tahlilini yaratish
         market_data = await self._generate_market_analysis(
@@ -93,7 +90,7 @@ class ContentGenerator:
         Returns:
             Prezentatsiya content (JSON)
         """
-        model = "gemini-2.0-flash" if use_gpt4 else "gemini-2.0-flash"
+        model = "gpt-4" if use_gpt4 else "gpt-3.5-turbo"
 
         prompt = f"""
 Siz professional prezentatsiya mutaxassisisiz. O'zbek tilida prezentatsiya content yarating.
