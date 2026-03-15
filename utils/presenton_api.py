@@ -73,11 +73,11 @@ class PresentonAPI:
             "content": text_content,
             "n_slides": num_cards,
             "tone": "professional",
-            "verbosity": "standard",
+            "verbosity": "detailed",
             "language": "Uzbek",
             "template": template,
             "include_title_slide": True,
-            "include_table_of_contents": False,
+            "include_table_of_contents": True,
             "export_as": "pptx",
         }
 

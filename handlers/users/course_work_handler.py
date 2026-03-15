@@ -115,12 +115,19 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
 
         # Frontenddan kelgan qo'shimcha ma'lumotlarni content'ga qo'shish
         if content_json:
+            author = content_json.setdefault('author_info', {})
             if data.get('student_name'):
-                content_json.setdefault('author_info', {})['student_name'] = data['student_name']
+                author['student_name'] = data['student_name']
+            if data.get('student_group'):
+                author['student_group'] = data['student_group']
             if data.get('teacher_name'):
-                content_json.setdefault('author_info', {})['teacher_name'] = data['teacher_name']
+                author['teacher_name'] = data['teacher_name']
+            if data.get('teacher_rank'):
+                author['teacher_rank'] = data['teacher_rank']
             if data.get('university'):
-                content_json.setdefault('author_info', {})['institution'] = data['university']
+                author['institution'] = data['university']
+            if data.get('faculty'):
+                author['faculty'] = data['faculty']
             if data.get('work_name'):
                 content_json['work_type_name'] = data['work_name']
 

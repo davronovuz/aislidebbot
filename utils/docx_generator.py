@@ -399,130 +399,122 @@ class DocxGenerator:
     # Hujjat bo'limlari
     # ──────────────────────────────────────────────
 
-    def _add_title_page(self, doc: Document, content: Dict, work_type: str):
-        """
-        Professional titul sahifa.
-        GOST standarti bo'yicha formatlangan.
-        """
-        author_info = content.get('author_info', {})
-
-        # Muassasa nomi
-        institution = author_info.get(
-            'institution',
-            "O'ZBEKISTON RESPUBLIKASI OLIY TA'LIM, FAN VA INNOVATSIYALAR VAZIRLIGI"
-        )
+    def _add_centered_line(self, doc: Document, text: str, size: int = 14, bold: bool = False, space_after: int = 0):
+        """Markazlashtirilgan qator qo'shish"""
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.paragraph_format.first_line_indent = Cm(0)
-        p.paragraph_format.space_after = Pt(0)
-        run = p.add_run(institution.upper())
-        run.bold = True
-        run.font.size = Pt(14)
+        p.paragraph_format.space_after = Pt(space_after)
+        p.paragraph_format.space_before = Pt(0)
+        run = p.add_run(text)
+        run.bold = bold
+        run.font.size = Pt(size)
         run.font.name = self.FONT_NAME
+        return p
 
-        # Fakultet
-        faculty = author_info.get('faculty', '')
-        if faculty:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p.paragraph_format.first_line_indent = Cm(0)
-            p.paragraph_format.space_after = Pt(0)
-            run = p.add_run(faculty)
-            run.font.size = Pt(14)
-            run.font.name = self.FONT_NAME
-
-        # Kafedra
-        department = author_info.get('department', '')
-        if department:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p.paragraph_format.first_line_indent = Cm(0)
-            p.paragraph_format.space_after = Pt(0)
-            run = p.add_run(department)
-            run.font.size = Pt(14)
-            run.font.name = self.FONT_NAME
-
-        # Katta bo'sh joy (ish turi va mavzudan oldin)
-        for _ in range(5):
+    def _add_empty_lines(self, doc: Document, count: int):
+        """Bo'sh qatorlar qo'shish"""
+        for _ in range(count):
             p = doc.add_paragraph()
             p.paragraph_format.first_line_indent = Cm(0)
             p.paragraph_format.space_after = Pt(0)
             p.paragraph_format.space_before = Pt(0)
 
-        # Ish turi
-        work_label = WORK_TYPE_LABELS.get(work_type, 'MUSTAQIL ISH')
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.paragraph_format.first_line_indent = Cm(0)
-        p.paragraph_format.space_after = Pt(6)
-        run = p.add_run(work_label)
-        run.bold = True
-        run.font.size = Pt(16)
-        run.font.name = self.FONT_NAME
-
-        # Mavzu nomi
-        title = content.get('title', 'MAVZU')
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.paragraph_format.first_line_indent = Cm(0)
-        p.paragraph_format.space_after = Pt(0)
-        run = p.add_run(title.upper())
-        run.bold = True
-        run.font.size = Pt(18)
-        run.font.name = self.FONT_NAME
-
-        # Subtitle (agar bor bo'lsa)
-        subtitle = content.get('subtitle', '')
-        if subtitle:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p.paragraph_format.first_line_indent = Cm(0)
-            p.paragraph_format.space_after = Pt(0)
-            run = p.add_run(subtitle)
-            run.font.size = Pt(14)
-            run.font.name = self.FONT_NAME
-
-        # Bo'sh joy (bajargan/tekshirgan bloklaridan oldin)
-        for _ in range(4):
-            p = doc.add_paragraph()
-            p.paragraph_format.first_line_indent = Cm(0)
-            p.paragraph_format.space_after = Pt(0)
-            p.paragraph_format.space_before = Pt(0)
-
-        # Bajardi va Tekshirdi bloklari - o'ngga tekislangan
+    def _add_right_line(self, doc: Document, label: str, value: str, size: int = 14):
+        """O'ngga tekislangan label: value qator"""
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         p.paragraph_format.first_line_indent = Cm(0)
         p.paragraph_format.space_after = Pt(2)
+        p.paragraph_format.space_before = Pt(0)
+        # Label (oddiy)
+        run = p.add_run(f'{label} ')
+        run.font.size = Pt(size)
+        run.font.name = self.FONT_NAME
+        # Value (qalin)
+        run = p.add_run(value if value else '_______________')
+        run.bold = bool(value)
+        run.font.size = Pt(size)
+        run.font.name = self.FONT_NAME
+
+    def _add_title_page(self, doc: Document, content: Dict, work_type: str):
+        """
+        Professional titul sahifa.
+        O'zbekiston universitetlari GOST standarti bo'yicha.
+        """
+        author_info = content.get('author_info', {})
+        subject = content.get('subject', '')
+
+        # ─── YUQORI QISM: Vazirlk + Universitet + Fakultet ───
+
+        # Vazirlik
+        self._add_centered_line(doc,
+            "O'ZBEKISTON RESPUBLIKASI OLIY TA'LIM, FAN VA INNOVATSIYALAR VAZIRLIGI",
+            size=12, bold=True, space_after=6)
+
+        # Universitet nomi
+        institution = author_info.get('institution', '')
+        if institution:
+            self._add_centered_line(doc, institution.upper(), size=14, bold=True, space_after=4)
+
+        # Fakultet
+        faculty = author_info.get('faculty', '')
+        if faculty:
+            self._add_centered_line(doc, f"{faculty} fakulteti", size=14, bold=False, space_after=2)
+
+        # Kafedra (fan nomi asosida)
+        department = author_info.get('department', '')
+        if department:
+            self._add_centered_line(doc, department, size=14, bold=False, space_after=0)
+        elif subject:
+            self._add_centered_line(doc, f'"{subject}" kafedrasi', size=14, bold=False, space_after=0)
+
+        # ─── O'RTA QISM: Ish turi + Mavzu ───
+
+        self._add_empty_lines(doc, 4)
+
+        # Ish turi
+        work_label = WORK_TYPE_LABELS.get(work_type, 'MUSTAQIL ISH')
+        self._add_centered_line(doc, work_label, size=18, bold=True, space_after=8)
+
+        # "Mavzu:" sarlavhasi
+        self._add_centered_line(doc, 'Mavzu:', size=14, bold=False, space_after=4)
+
+        # Mavzu nomi (katta, qalin)
+        title = content.get('title', 'MAVZU')
+        self._add_centered_line(doc, f'"{title.upper()}"', size=16, bold=True, space_after=4)
+
+        # Fan nomi (subtitle)
+        if subject:
+            self._add_centered_line(doc, f'{subject} fanidan', size=14, bold=False, space_after=0)
+
+        # ─── PASTKI-O'RTA QISM: Bajardi / Tekshirdi ───
+
+        self._add_empty_lines(doc, 4)
+
+        # Bajardi bloki
         student = author_info.get('student_name', '')
-        student_text = f'Bajardi: {student}' if student else 'Bajardi: ___________'
-        run = p.add_run(student_text)
-        run.font.size = Pt(14)
-        run.font.name = self.FONT_NAME
+        student_group = author_info.get('student_group', '')
+        self._add_right_line(doc, 'Bajardi:', student)
+        if student_group:
+            self._add_right_line(doc, 'Guruh:', student_group)
 
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        p.paragraph_format.first_line_indent = Cm(0)
-        p.paragraph_format.space_after = Pt(0)
+        # Bo'sh qator
+        self._add_empty_lines(doc, 1)
+
+        # Tekshirdi bloki
         teacher = author_info.get('teacher_name', '')
-        teacher_text = f'Tekshirdi: {teacher}' if teacher else 'Tekshirdi: ___________'
-        run = p.add_run(teacher_text)
-        run.font.size = Pt(14)
-        run.font.name = self.FONT_NAME
+        teacher_rank = author_info.get('teacher_rank', '')
+        if teacher_rank and teacher:
+            self._add_right_line(doc, 'Tekshirdi:', f'{teacher_rank} {teacher}')
+        else:
+            self._add_right_line(doc, 'Tekshirdi:', teacher)
 
-        # Pastki qism - shahar va yil
-        for _ in range(3):
-            p = doc.add_paragraph()
-            p.paragraph_format.first_line_indent = Cm(0)
-            p.paragraph_format.space_after = Pt(0)
-            p.paragraph_format.space_before = Pt(0)
+        # ─── ENG PASTKI QISM: Shahar – Yil ───
 
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.paragraph_format.first_line_indent = Cm(0)
-        run = p.add_run(f'Toshkent \u2013 {datetime.now().year}')
-        run.font.size = Pt(14)
-        run.font.name = self.FONT_NAME
+        self._add_empty_lines(doc, 3)
+
+        self._add_centered_line(doc, f'Toshkent \u2013 {datetime.now().year}', size=14, bold=True)
 
         # Yangi sahifa
         doc.add_page_break()
