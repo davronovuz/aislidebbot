@@ -73,7 +73,7 @@ class PresentonAPI:
             "content": text_content,
             "n_slides": num_cards,
             "tone": "professional",
-            "verbosity": "detailed",
+            "verbosity": "standard",
             "language": "Uzbek",
             "template": template,
             "include_title_slide": True,
@@ -415,23 +415,30 @@ TAKLIF:
         return text.strip()
 
     def _format_presentation(self, content: Dict) -> str:
-        """Oddiy prezentatsiya"""
+        """Professional prezentatsiya formatlash — Presenton uchun optimallashtirilgan"""
         title = content.get("title", "Prezentatsiya")
         subtitle = content.get("subtitle", "")
         slides = content.get("slides", [])
 
-        text = f"{title}\n\n{subtitle}\n\n"
+        text = f"# {title}\n{subtitle}\n\n"
 
         for slide in slides:
             slide_title = slide.get("title", "")
             slide_content = slide.get("content", "")
             bullet_points = slide.get("bullet_points", [])
+            image_keyword = slide.get("image_keyword", "")
 
-            text += f"\n{slide_title}\n\n{slide_content}\n"
+            text += f"## {slide_title}\n"
+
+            if slide_content:
+                text += f"{slide_content}\n"
 
             if bullet_points:
                 for point in bullet_points:
-                    text += f"- {point}\n"
+                    text += f"• {point}\n"
+
+            if image_keyword:
+                text += f"[Image: {image_keyword}]\n"
 
             text += "\n"
 

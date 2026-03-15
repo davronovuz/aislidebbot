@@ -80,64 +80,58 @@ class ContentGenerator:
             use_gpt4: bool = False
     ) -> Dict:
         """
-        Oddiy prezentatsiya uchun content yaratish
-
-        Args:
-            topic: Prezentatsiya mavzusi
-            details: Qo'shimcha ma'lumotlar
-            slide_count: Slaydlar soni
-
-        Returns:
-            Prezentatsiya content (JSON)
+        Professional prezentatsiya uchun content yaratish
+        GPT-4o bilan ishlaydi
         """
-        model = "gpt-4" if use_gpt4 else "gpt-3.5-turbo"
+        model = "gpt-4o"
 
-        prompt = f"""
-Siz professional prezentatsiya mutaxassisisiz. O'zbek tilida prezentatsiya content yarating.
+        prompt = f"""Siz professional prezentatsiya dizayneri va kontent yaratuvchisisiz.
 
 MAVZU: {topic}
+QO'SHIMCHA: {details or "Yo'q"}
+SLAYDLAR SONI: {slide_count}
 
-QO'SHIMCHA: {details}
-
-SLAYDLAR: {slide_count}
+MUHIM QOIDALAR:
+1. Har bir slayd QISQA va TA'SIRLI bo'lsin — slaydda KO'P MATN BO'LMASIN
+2. Bullet pointlar 1 qator, maksimum 10-12 so'z
+3. Slayd sarlavhasi qisqa va kuchli bo'lsin (3-6 so'z)
+4. Content 2-3 jumla, ortiq emas
+5. Har bir slaydga INGLIZ TILIDAGI image_keyword bering — Pixabay dan rasm qidirish uchun (masalan: "technology innovation", "education classroom", "business growth chart")
+6. image_keyword mavzuga TO'G'RI MOS kelsin, abstrakt emas
 
 JSON formatida qaytaring:
 {{
   "title": "Prezentatsiya sarlavhasi",
-  "subtitle": "Qisqa tavsif",
+  "subtitle": "Qisqa tavsif (1 jumla)",
   "slides": [
     {{
       "slide_number": 1,
-      "title": "Slayd sarlavhasi",
-      "content": "Slayd mazmuni (3-5 jumla)",
-      "bullet_points": [
-        "Birinchi nuqta (2-3 jumla)",
-        "Ikkinchi nuqta (2-3 jumla)",
-        "Uchinchi nuqta (2-3 jumla)"
-      ]
+      "title": "Qisqa sarlavha",
+      "content": "2-3 jumla bilan asosiy fikr",
+      "bullet_points": ["Qisqa nuqta 1", "Qisqa nuqta 2", "Qisqa nuqta 3"],
+      "image_keyword": "relevant english keyword for pixabay"
     }}
   ]
 }}
 
-Jami {slide_count} ta slayd yarating. HAR BIR SLAYD BATAFSIL!
-"""
+{slide_count} ta slayd yarating. Birinchi slayd — kirish, oxirgi — xulosa."""
 
         try:
-            logger.info(f"OpenAI: Prezentatsiya content yaratish boshlandi (model: {model})")
+            logger.info(f"OpenAI: Prezentatsiya content yaratish (model: {model})")
 
             response = await self.client.chat.completions.create(
                 model=model,
                 messages=[
                     {
                         "role": "system",
-                        "content": "Siz professional prezentatsiya yaratuvchisiz. O'zbek tilida javob bering."
+                        "content": "Siz professional prezentatsiya yaratuvchisiz. Slaydlar QISQA va TA'SIRLI bo'lsin — ko'p matn yozmaslik kerak. O'zbek tilida javob bering. image_keyword INGLIZ tilida bo'lsin."
                     },
                     {
                         "role": "user",
                         "content": prompt
                     }
                 ],
-                max_tokens=3000,
+                max_tokens=4000,
                 temperature=0.7,
                 response_format={"type": "json_object"}
             )
