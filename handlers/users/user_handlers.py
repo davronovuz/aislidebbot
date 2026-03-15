@@ -1078,6 +1078,8 @@ async def prices_handler(message: types.Message):
         telegram_id = message.from_user.id
         free_left = user_db.get_free_presentations(telegram_id)
         slide_price = user_db.get_price('slide_basic') or 500
+        page_price = user_db.get_price('page_basic') or 500
+        balance = user_db.get_user_balance(telegram_id)
 
         price_text = "💰 <b>Narxlar</b>\n\n"
 
@@ -1087,12 +1089,15 @@ async def prices_handler(message: types.Message):
         price_text += f"   • 15 slayd = <b>{slide_price * 15:,.0f} so'm</b>\n\n"
 
         price_text += "📝 <b>Mustaqil ish / Referat</b>\n"
-        price_text += "   • <b>BEPUL</b> ✅\n\n"
+        price_text += f"   • 1 sahifa = <b>{page_price:,.0f} so'm</b>\n"
+        price_text += f"   • 12 sahifa = <b>{page_price * 12:,.0f} so'm</b>\n"
+        price_text += f"   • 25 sahifa = <b>{page_price * 25:,.0f} so'm</b>\n\n"
 
         if free_left > 0:
             price_text += f"🎁 Sizda <b>{free_left} ta BEPUL</b> prezentatsiya bor!\n\n"
 
-        price_text += "💳 Balansni to'ldirish uchun <b>\"💳 To'ldirish\"</b> tugmasini bosing."
+        price_text += f"💳 Balansingiz: <b>{balance:,.0f} so'm</b>\n"
+        price_text += "To'ldirish uchun <b>\"💳 To'ldirish\"</b> tugmasini bosing."
 
         await message.answer(price_text, parse_mode='HTML')
 

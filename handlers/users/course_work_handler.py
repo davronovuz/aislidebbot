@@ -56,12 +56,43 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         return
 
     topic = data.get('topic', 'Mavzusiz')
+    page_count = int(data.get('page_count', 12))
+
+    # --- TO'LOV TEKSHIRISH ---
+    price_per_page = user_db.get_price('page_basic') or 500
+    total_price = price_per_page * page_count
+    balance = user_db.get_user_balance(telegram_id)
+
+    if balance < total_price:
+        await message.answer(
+            f"❌ <b>Balans yetarli emas!</b>\n\n"
+            f"📄 Sahifalar: {page_count} ta\n"
+            f"💰 Kerakli: <b>{total_price:,.0f} so'm</b>\n"
+            f"💳 Sizda: <b>{balance:,.0f} so'm</b>\n\n"
+            f"Balansni to'ldiring va qaytadan urinib ko'ring.",
+            parse_mode='HTML',
+            reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db)
+        )
+        return
+
+    success_deduct = user_db.deduct_from_balance(telegram_id, total_price)
+    if not success_deduct:
+        await message.answer("❌ Balansdan yechishda xatolik!", reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db))
+        return
+
+    user_db.create_transaction(
+        telegram_id=telegram_id, transaction_type='withdrawal',
+        amount=total_price, description=f'Mustaqil ish ({page_count} sahifa)', status='approved'
+    )
 
     # 2. "Kuting" xabarini yuborish
+    new_balance = user_db.get_user_balance(telegram_id)
     status_msg = await message.answer(
         f"✅ <b>Qabul qilindi!</b>\n"
         f"📚 Mavzu: {topic}\n"
-        f"⏳ <b>AI ishni yozmoqda...</b>\n\n"
+        f"💰 Yechildi: <b>{total_price:,.0f} so'm</b>\n"
+        f"💳 Balans: <b>{new_balance:,.0f} so'm</b>\n\n"
+        f"⏳ <b>AI ishni yozmoqda...</b>\n"
         f"<i>Iltimos kuting, 1-3 daqiqa vaqt ketadi.</i>",
         parse_mode='HTML',
         reply_markup=types.ReplyKeyboardRemove()
@@ -94,10 +125,16 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
                 content_json['work_type_name'] = data['work_name']
 
         if not content_json:
+            # Pulni qaytarish
+            user_db.add_to_balance(telegram_id, total_price)
+            user_db.create_transaction(
+                telegram_id=telegram_id, transaction_type='refund',
+                amount=total_price, description=f'Qaytarildi: Mustaqil ish generatsiya xatosi', status='approved'
+            )
             try:
-                await status_msg.edit_text("❌ AI generatsiya qila olmadi. Qaytadan urinib ko'ring.")
+                await status_msg.edit_text("❌ AI generatsiya qila olmadi. Pul qaytarildi. Qaytadan urinib ko'ring.")
             except:
-                await message.answer("❌ AI generatsiya qila olmadi. Qaytadan urinib ko'ring.")
+                await message.answer("❌ AI generatsiya qila olmadi. Pul qaytarildi. Qaytadan urinib ko'ring.")
 
             await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db))
             return
@@ -159,10 +196,19 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
 
     except Exception as e:
         logger.error(f"Umumiy jarayonda xato: {e}")
+        # Pulni qaytarish
         try:
-            await status_msg.edit_text("❌ Tizimda kutilmagan xatolik yuz berdi. Adminga xabar bering.")
+            user_db.add_to_balance(telegram_id, total_price)
+            user_db.create_transaction(
+                telegram_id=telegram_id, transaction_type='refund',
+                amount=total_price, description=f'Qaytarildi: Tizim xatosi', status='approved'
+            )
+        except Exception:
+            pass
+        try:
+            await status_msg.edit_text("❌ Xatolik yuz berdi. Pul qaytarildi.")
         except:
-            await message.answer("❌ Tizimda kutilmagan xatolik yuz berdi. Adminga xabar bering.")
+            await message.answer("❌ Xatolik yuz berdi. Pul qaytarildi.")
 
         await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db))
 

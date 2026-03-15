@@ -82,8 +82,10 @@ def main_menu_keyboard(telegram_id=None, user_db=None):
         try:
             balance = user_db.get_user_balance(telegram_id)
             free_left = user_db.get_free_presentations(telegram_id)
-            price_per_slide = user_db.get_price('slide_basic') or 2000
+            price_per_slide = user_db.get_price('slide_basic') or 500
+            price_per_page = user_db.get_price('page_basic') or 500
             pres_url += f"&balance={balance}&free={free_left}&price={price_per_slide}"
+            cw_url += f"?balance={balance}&price={price_per_page}"
         except Exception:
             pass
 

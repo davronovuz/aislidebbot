@@ -86,6 +86,7 @@ class UserDatabase(Database):
             ('slide_pro', 2000.00, "so'm", 'Professional slayd', True),
             ('presentation_basic', 10000.00, "so'm", 'Oddiy prezentatsiya (10 slayd)', True),
             ('presentation_pro', 20000.00, "so'm", 'Professional prezentatsiya (10 slayd)', True),
+            ('page_basic', 500.00, "so'm", 'Mustaqil ish (1 sahifa)', True),
         ]
 
         for service, price, currency, desc, active in default_prices:
