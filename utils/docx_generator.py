@@ -494,7 +494,9 @@ class DocxGenerator:
         p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         p.paragraph_format.first_line_indent = Cm(0)
         p.paragraph_format.space_after = Pt(2)
-        run = p.add_run('Bajardi: ___________')
+        student = author_info.get('student_name', '')
+        student_text = f'Bajardi: {student}' if student else 'Bajardi: ___________'
+        run = p.add_run(student_text)
         run.font.size = Pt(14)
         run.font.name = self.FONT_NAME
 
@@ -502,7 +504,9 @@ class DocxGenerator:
         p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         p.paragraph_format.first_line_indent = Cm(0)
         p.paragraph_format.space_after = Pt(0)
-        run = p.add_run('Tekshirdi: ___________')
+        teacher = author_info.get('teacher_name', '')
+        teacher_text = f'Tekshirdi: {teacher}' if teacher else 'Tekshirdi: ___________'
+        run = p.add_run(teacher_text)
         run.font.size = Pt(14)
         run.font.name = self.FONT_NAME
 

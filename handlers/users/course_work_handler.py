@@ -96,6 +96,17 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
             language=data.get('language', 'uz')
         )
 
+        # Frontenddan kelgan qo'shimcha ma'lumotlarni content'ga qo'shish
+        if content_json:
+            if data.get('student_name'):
+                content_json.setdefault('author_info', {})['student_name'] = data['student_name']
+            if data.get('teacher_name'):
+                content_json.setdefault('author_info', {})['teacher_name'] = data['teacher_name']
+            if data.get('university'):
+                content_json.setdefault('author_info', {})['institution'] = data['university']
+            if data.get('work_name'):
+                content_json['work_type_name'] = data['work_name']
+
         if not content_json:
             try:
                 await status_msg.edit_text("❌ AI generatsiya qila olmadi. Qaytadan urinib ko'ring.")
