@@ -2,7 +2,7 @@ from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.dispatcher.filters import Text
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 import logging
 import json
 import uuid
@@ -510,35 +510,23 @@ async def presentation_start(message: types.Message, state: FSMContext):
         info_text = f"""
 📊 <b>PREZENTATSIYA YARATISH</b>
 
-📝 <b>Jarayon:</b>
-1. Mavzu kiriting
-2. Qo'shimcha ma'lumotlar (ixtiyoriy)
-3. Slaydlar sonini tanlang
-4. 🎨 Theme tanlang (ixtiyoriy)
-5. Professional AI prezentatsiya yaratadi
-
 💰 <b>Narx:</b> {price_per_slide:,.0f} so'm / slayd
 💳 <b>Balansingiz:</b> {balance:,.0f} so'm
 """
 
         if free_left > 0:
-            info_text += f"""
-🎁 <b>BEPUL PREZENTATSIYA:</b> {free_left} ta qoldi!
+            info_text += f"🎁 <b>Bepul prezentatsiya:</b> {free_left} ta qoldi!\n"
 
-✅ Bu prezentatsiya TEKIN bo'ladi!
-"""
+        info_text += "\nQuyidagi tugmani bosib, formani to'ldiring 👇"
 
-        info_text += """
-<b>Masalan (pullik):</b>
-- 5 slayd = """ + f"{(price_per_slide * 5):,.0f}" + """ so'm
-- 10 slayd = """ + f"{(price_per_slide * 10):,.0f}" + """ so'm
+        markup = ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(KeyboardButton(
+            text="📊 Formani ochish",
+            web_app=WebAppInfo(url="https://aislide-frontend.vercel.app/?type=presentation")
+        ))
+        markup.add(KeyboardButton(text="⬅️ Bosh menyu"))
 
-✍️ Prezentatsiya mavzusini kiriting:
-"""
-
-        await message.answer(info_text, reply_markup=cancel_keyboard(), parse_mode='HTML')
-        await state.update_data(price_per_slide=price_per_slide, free_left=free_left)
-        await PresentationStates.waiting_for_topic.set()
+        await message.answer(info_text, reply_markup=markup, parse_mode='HTML')
 
     except Exception as e:
         logger.error(f"❌ Presentation start xato: {e}")

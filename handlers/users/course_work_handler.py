@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 import logging
 import asyncio
 from aiogram import types
@@ -7,7 +8,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, ContentType
 from aiogram.utils.exceptions import MessageCantBeEdited, MessageToDeleteNotFound
 
-from loader import dp, bot
+from loader import dp, bot, user_db
 from data.config import OPENAI_API_KEY
 
 # --- IMPORTLAR ---
@@ -20,6 +21,7 @@ from keyboards.default.default_keyboard import main_menu_keyboard
 
 # Vercel manzilingiz
 WEB_APP_URL = "https://aislide-frontend.vercel.app/"
+WEB_APP_PRESENTATION_URL = "https://aislide-frontend.vercel.app/?type=presentation"
 
 
 # ==============================================================================
@@ -67,6 +69,11 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
             "❌ Ma'lumotni o'qishda xatolik yuz berdi.",
             reply_markup=main_menu_keyboard()  # <-- () qo'shildi
         )
+        return
+
+    # Prezentatsiya yoki Mustaqil ish?
+    if data.get('type') == 'presentation':
+        await _handle_presentation_web_data(message, data)
         return
 
     topic = data.get('topic', 'Mavzusiz')
@@ -178,4 +185,90 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         except:
             await message.answer("❌ Tizimda kutilmagan xatolik yuz berdi. Adminga xabar bering.")
 
-        await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard())  # <-- ()
+        await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard())
+
+
+# ==============================================================================
+# PREZENTATSIYA WEB APP HANDLER
+# ==============================================================================
+async def _handle_presentation_web_data(message: types.Message, data: dict):
+    """Web App'dan kelgan prezentatsiya ma'lumotlarini qayta ishlash"""
+    telegram_id = message.from_user.id
+    topic = data.get('topic', 'Mavzusiz')
+    details = data.get('details', '')
+    slide_count = int(data.get('slide_count', 10))
+    theme_id = data.get('theme_id', 'chisel')
+
+    try:
+        free_left = user_db.get_free_presentations(telegram_id)
+        is_free = free_left > 0
+
+        if is_free:
+            user_db.use_free_presentation(telegram_id)
+            amount_charged = 0
+        else:
+            price_per_slide = user_db.get_price('slide_basic') or 2000.0
+            total_price = price_per_slide * slide_count
+            balance = user_db.get_user_balance(telegram_id)
+
+            if balance < total_price:
+                await message.answer(
+                    f"❌ <b>Balans yetarli emas!</b>\n\n"
+                    f"Kerakli: {total_price:,.0f} so'm\nSizda: {balance:,.0f} so'm",
+                    parse_mode='HTML', reply_markup=main_menu_keyboard()
+                )
+                return
+
+            success = user_db.deduct_from_balance(telegram_id, total_price)
+            if not success:
+                await message.answer("❌ Balansdan yechishda xatolik!", reply_markup=main_menu_keyboard())
+                return
+
+            user_db.create_transaction(
+                telegram_id=telegram_id, transaction_type='withdrawal',
+                amount=total_price, description=f'Prezentatsiya ({slide_count} slayd)', status='approved'
+            )
+            amount_charged = total_price
+
+        task_uuid = str(uuid.uuid4())
+        content_data = {
+            'topic': topic, 'details': details,
+            'slide_count': slide_count, 'theme_id': theme_id
+        }
+
+        task_id = user_db.create_presentation_task(
+            telegram_id=telegram_id, task_uuid=task_uuid,
+            presentation_type='basic', slide_count=slide_count,
+            answers=json.dumps(content_data, ensure_ascii=False),
+            amount_charged=amount_charged
+        )
+
+        if not task_id:
+            if not is_free and amount_charged > 0:
+                user_db.add_to_balance(telegram_id, amount_charged)
+            await message.answer("❌ Task yaratishda xatolik!", reply_markup=main_menu_keyboard())
+            return
+
+        if is_free:
+            new_free = user_db.get_free_presentations(telegram_id)
+            text = (
+                f"🎁 <b>BEPUL prezentatsiya boshlandi!</b>\n\n"
+                f"📊 Mavzu: {topic}\n📑 Slaydlar: {slide_count} ta\n"
+                f"🎁 Qolgan bepul: {new_free} ta\n\n"
+                f"⏳ <b>3-7 daqiqa</b>. Tayyor bo'lgach PPTX yuboriladi! 🎉"
+            )
+        else:
+            new_balance = user_db.get_user_balance(telegram_id)
+            text = (
+                f"✅ <b>Prezentatsiya boshlandi!</b>\n\n"
+                f"📊 Mavzu: {topic}\n📑 Slaydlar: {slide_count} ta\n"
+                f"💰 Yechildi: {amount_charged:,.0f} so'm\n💳 Balans: {new_balance:,.0f} so'm\n\n"
+                f"⏳ <b>3-7 daqiqa</b>. Tayyor bo'lgach PPTX yuboriladi! 🎉"
+            )
+
+        await message.answer(text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
+        logger.info(f"✅ Web prezentatsiya task: {task_uuid} | User: {telegram_id} | Free: {is_free}")
+
+    except Exception as e:
+        logger.error(f"❌ Web prezentatsiya xato: {e}")
+        await message.answer("❌ Xatolik yuz berdi!", reply_markup=main_menu_keyboard())
