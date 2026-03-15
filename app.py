@@ -20,16 +20,15 @@ from loader import dp, bot, user_db,channel_db
 
 # Import utilities
 from utils.content_generator import ContentGenerator
-from utils.gamma_api import GammaAPI
+from utils.presenton_api import PresentonAPI
 from utils.presentation_worker import PresentationWorker
 
 # API keys
 OPENAI_API_KEY = env.str("OPENAI_API_KEY")
-GAMMA_API_KEY = env.str("GAMMA_API_KEY")
 
 # Initialize utilities
 content_generator = ContentGenerator(OPENAI_API_KEY)
-gamma_api = GammaAPI(GAMMA_API_KEY)
+presenton_api = PresentonAPI()  # Self-hosted, API key kerak emas
 presentation_worker = None
 
 import handlers.users.user_handlers
@@ -62,7 +61,7 @@ async def on_startup(dispatcher):
             bot=bot,
             user_db=user_db,
             content_generator=content_generator,
-            gamma_api=gamma_api
+            presenton_api=presenton_api
         )
         await presentation_worker.start()
         logger.info("✅ Background Worker ishga tushdi")

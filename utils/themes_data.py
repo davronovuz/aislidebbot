@@ -1,7 +1,6 @@
 # data/themes_data.py
-# Gamma API Theme'lar ma'lumotlari
-# ✅ HAQIQIY ID'lar - lowercase, tire bilan
-# Gamma API dan olingan: GET /v1.0/themes
+# Presenton API Theme'lar ma'lumotlari
+# Gamma ID'lar saqlanadi - PresentonAPI da avtomatik mapping qilinadi
 
 THEMES = [
     {
