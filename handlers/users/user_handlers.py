@@ -1075,19 +1075,24 @@ async def no_handler(message: types.Message, state: FSMContext):
 @dp.message_handler(Text(equals="💵 Narxlar"), state='*')
 async def prices_handler(message: types.Message):
     try:
-        prices = user_db.get_all_prices()
-
-        price_text = "💵 <b>XIZMATLAR NARXLARI</b>\n\n"
-
-        for price in prices:
-            if price['is_active']:
-                price_text += f"<b>{price['description']}</b>\n💰 {price['price']:,.0f} {price['currency']}\n━━━━━━━━━━━━━━━\n"
-
         telegram_id = message.from_user.id
         free_left = user_db.get_free_presentations(telegram_id)
+        slide_price = user_db.get_price('slide_basic') or 500
+
+        price_text = "💰 <b>Narxlar</b>\n\n"
+
+        price_text += "📊 <b>Prezentatsiya</b>\n"
+        price_text += f"   • 1 slayd = <b>{slide_price:,.0f} so'm</b>\n"
+        price_text += f"   • 10 slayd = <b>{slide_price * 10:,.0f} so'm</b>\n"
+        price_text += f"   • 15 slayd = <b>{slide_price * 15:,.0f} so'm</b>\n\n"
+
+        price_text += "📝 <b>Mustaqil ish / Referat</b>\n"
+        price_text += "   • <b>BEPUL</b> ✅\n\n"
 
         if free_left > 0:
-            price_text += f"\n🎁 <b>Sizda {free_left} ta BEPUL prezentatsiya bor!</b>"
+            price_text += f"🎁 Sizda <b>{free_left} ta BEPUL</b> prezentatsiya bor!\n\n"
+
+        price_text += "💳 Balansni to'ldirish uchun <b>\"💳 To'ldirish\"</b> tugmasini bosing."
 
         await message.answer(price_text, parse_mode='HTML')
 
