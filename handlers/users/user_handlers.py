@@ -926,7 +926,7 @@ async def balance_topup_start(message: types.Message, state: FSMContext):
 
 ✍️ Qancha summa to'ldirmoqchisiz?
 
-Minimal: 10,000 so'm
+Minimal: 5,000 so'm
 Maksimal: 10,000,000 so'm
 
 Masalan: 50000
@@ -947,8 +947,8 @@ async def balance_topup_amount(message: types.Message, state: FSMContext):
     try:
         amount = float(message.text.strip().replace(',', '').replace(' ', ''))
 
-        if amount < 10000:
-            await message.answer("❌ Minimal summa: 10,000 so'm")
+        if amount < 5000:
+            await message.answer("❌ Minimal summa: 5,000 so'm")
             return
 
         if amount > 10000000:
