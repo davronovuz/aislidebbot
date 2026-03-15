@@ -1,11 +1,13 @@
 # utils/presenton_api.py
 # Presenton API client - Gamma API o'rniga bepul, open-source alternativa
 # Self-hosted Docker konteyner orqali ishlaydi
+# API V1 endpoint'lar ishlatiladi
 
 import aiohttp
 import asyncio
 import logging
 import os
+import json
 from typing import Optional, Dict
 
 logger = logging.getLogger(__name__)
@@ -18,36 +20,37 @@ class PresentonAPI:
     Base URL: http://presenton:80 (Docker network ichida)
     Hech qanday API key talab qilmaydi (self-hosted)
 
-    Endpoints:
-    - POST /api/v3/presentation/generate/async - asinxron yaratish
-    - GET  /api/v3/async-task/status/{id}      - status tekshirish
-    - POST /api/v3/presentation/export         - PPTX/PDF eksport
-    - GET  /api/v3/standard-template/all       - shablonlar ro'yxati
+    V1 Endpoints:
+    - POST /api/v1/ppt/presentation/generate       - sinxron yaratish
+    - POST /api/v1/ppt/presentation/generate/async  - asinxron yaratish
+    - GET  /api/v1/ppt/presentation/status/{id}     - status tekshirish
+    - POST /api/v1/ppt/presentation/export/pptx     - PPTX eksport
+    - POST /api/v1/ppt/presentation/export          - umumiy eksport
     """
 
-    # Presenton themelari - Gamma themelarga mapping
-    THEME_MAPPING = {
-        "chisel": {"theme": "professional-blue", "template": "neo-standard"},
-        "coal": {"theme": "professional-dark", "template": "neo-modern"},
-        "blues": {"theme": "professional-blue", "template": "neo-standard"},
-        "elysia": {"theme": "light-rose", "template": "neo-modern"},
-        "breeze": {"theme": "mint-blue", "template": "neo-swift"},
-        "aurora": {"theme": "professional-dark", "template": "neo-modern"},
-        "coral-glow": {"theme": "light-rose", "template": "neo-general"},
-        "gamma": {"theme": "edge-yellow", "template": "neo-swift"},
-        "creme": {"theme": "edge-yellow", "template": "neo-standard"},
-        "gamma-dark": {"theme": "professional-dark", "template": "neo-modern"},
+    # Gamma theme -> Presenton template mapping
+    TEMPLATE_MAPPING = {
+        "chisel": "standard",
+        "coal": "modern",
+        "blues": "standard",
+        "elysia": "modern",
+        "breeze": "swift",
+        "aurora": "modern",
+        "coral-glow": "general",
+        "gamma": "swift",
+        "creme": "standard",
+        "gamma-dark": "modern",
     }
 
     def __init__(self, base_url: str = None):
         self.base_url = (base_url or os.getenv("PRESENTON_URL", "http://presenton:80")).rstrip("/")
         self.timeout = aiohttp.ClientTimeout(total=600)
 
-    def _get_presenton_theme(self, gamma_theme_id: str) -> Dict:
-        """Gamma theme ID ni Presenton theme/template ga mapping qilish"""
-        if gamma_theme_id and gamma_theme_id.lower() in self.THEME_MAPPING:
-            return self.THEME_MAPPING[gamma_theme_id.lower()]
-        return {"theme": "professional-blue", "template": "neo-standard"}
+    def _get_template(self, gamma_theme_id: str) -> str:
+        """Gamma theme ID ni Presenton template ga mapping"""
+        if gamma_theme_id and gamma_theme_id.lower() in self.TEMPLATE_MAPPING:
+            return self.TEMPLATE_MAPPING[gamma_theme_id.lower()]
+        return "general"
 
     async def create_presentation_from_text(
             self,
@@ -61,37 +64,18 @@ class PresentonAPI:
         """
         Presenton orqali prezentatsiya yaratish (async)
 
-        Args:
-            text_content: Matn (kontent)
-            title: Sarlavha
-            num_cards: Slaydlar soni
-            text_mode: "generate" | "condense" | "preserve"
-            theme_id: Gamma theme ID (avtomatik mapping qilinadi)
-
         Returns:
             {'generationId': 'task-xxx', 'status': 'processing'}
         """
-        # Gamma theme ni Presenton ga mapping
-        theme_config = self._get_presenton_theme(theme_id if not _retry_without_theme else None)
-
-        # text_mode ni Presenton formatiga o'girish
-        content_generation_map = {
-            "generate": "enhance",
-            "condense": "condense",
-            "preserve": "preserve",
-        }
+        template = self._get_template(theme_id if not _retry_without_theme else None)
 
         payload = {
             "content": text_content,
             "n_slides": num_cards,
             "tone": "professional",
             "verbosity": "standard",
-            "content_generation": content_generation_map.get(text_mode, "enhance"),
-            "markdown_emphasis": True,
-            "image_type": "stock",
-            "theme": theme_config["theme"],
-            "standard_template": theme_config["template"],
             "language": "Uzbek",
+            "template": template,
             "include_title_slide": True,
             "include_table_of_contents": False,
             "export_as": "pptx",
@@ -99,20 +83,20 @@ class PresentonAPI:
 
         try:
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                url = f"{self.base_url}/api/v3/presentation/generate/async"
+                url = f"{self.base_url}/api/v1/ppt/presentation/generate/async"
                 logger.info(f"Presenton API: POST {url}")
-                logger.info(f"Cards: {num_cards}, Theme: {theme_config['theme']}, Template: {theme_config['template']}")
+                logger.info(f"Cards: {num_cards}, Template: {template}")
 
                 async with session.post(url, json=payload) as response:
                     response_text = await response.text()
                     logger.info(f"Response status: {response.status}")
-                    logger.info(f"Response: {response_text[:300]}")
+                    logger.info(f"Response: {response_text[:500]}")
 
                     if response.status in [200, 201]:
-                        import json
                         result = json.loads(response_text) if response_text else {}
 
-                        task_id = result.get("id")
+                        # Async endpoint task_id yoki id qaytaradi
+                        task_id = result.get("id") or result.get("task_id") or result.get("presentation_id")
                         if task_id:
                             logger.info(f"Task ID: {task_id}")
                             return {
@@ -123,11 +107,10 @@ class PresentonAPI:
                             logger.error(f"Task ID yo'q: {result}")
                             return None
                     else:
-                        logger.error(f"Presenton API XATO ({response.status}): {response_text}")
+                        logger.error(f"Presenton API XATO ({response.status}): {response_text[:300]}")
 
-                        # Fallback: theme'siz qayta urinish
                         if theme_id and not _retry_without_theme and response.status in [400, 422, 500]:
-                            logger.warning(f"Theme '{theme_id}' bilan xato! Theme'siz qayta urinib ko'ramiz...")
+                            logger.warning(f"Template '{template}' bilan xato! Default bilan qayta urinib ko'ramiz...")
                             return await self.create_presentation_from_text(
                                 text_content=text_content,
                                 title=title,
@@ -143,16 +126,10 @@ class PresentonAPI:
             return None
         except Exception as e:
             logger.error(f"Xato: {e}")
-
             if theme_id and not _retry_without_theme:
-                logger.warning("Exception! Theme'siz qayta urinib ko'ramiz...")
                 return await self.create_presentation_from_text(
-                    text_content=text_content,
-                    title=title,
-                    num_cards=num_cards,
-                    text_mode=text_mode,
-                    theme_id=None,
-                    _retry_without_theme=True,
+                    text_content=text_content, title=title, num_cards=num_cards,
+                    text_mode=text_mode, theme_id=None, _retry_without_theme=True,
                 )
             return None
 
@@ -160,36 +137,41 @@ class PresentonAPI:
         """
         Async task status tekshirish
 
-        Endpoint: GET /api/v3/async-task/status/{id}
+        Endpoint: GET /api/v1/ppt/presentation/status/{id}
         """
         try:
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                url = f"{self.base_url}/api/v3/async-task/status/{generation_id}"
+                url = f"{self.base_url}/api/v1/ppt/presentation/status/{generation_id}"
 
                 async with session.get(url) as response:
                     response_text = await response.text()
 
                     if response.status == 200:
-                        import json
                         result = json.loads(response_text)
-
-                        logger.info(f"Status response: {str(result)[:500]}")
+                        logger.info(f"Status: {str(result)[:500]}")
 
                         status = result.get("status", "unknown")
 
-                        # Presenton statuslarni Gamma formatiga mapping
+                        # Status mapping
                         status_map = {
                             "pending": "processing",
+                            "processing": "processing",
+                            "in_progress": "processing",
                             "completed": "completed",
+                            "done": "completed",
                             "error": "failed",
+                            "failed": "failed",
                         }
                         mapped_status = status_map.get(status, status)
 
-                        # Completed bo'lsa, data ichidan PPTX URL olish
+                        # PPTX URL olish
                         pptx_url = ""
-                        data = result.get("data")
-                        if data and isinstance(data, dict):
-                            pptx_url = data.get("path", "")
+                        presentation_id = ""
+
+                        data = result.get("data") or result
+                        if isinstance(data, dict):
+                            pptx_url = data.get("path", "") or data.get("pptx_url", "") or data.get("export_url", "")
+                            presentation_id = data.get("presentation_id", "") or data.get("id", "")
 
                         return {
                             "status": mapped_status,
@@ -199,10 +181,10 @@ class PresentonAPI:
                             "files": [],
                             "exports": {},
                             "result": result,
-                            "presentation_id": data.get("presentation_id", "") if data else "",
+                            "presentation_id": presentation_id,
                         }
                     else:
-                        logger.error(f"Status xato ({response.status}): {response_text}")
+                        logger.error(f"Status xato ({response.status}): {response_text[:300]}")
                         return None
 
         except Exception as e:
@@ -212,23 +194,24 @@ class PresentonAPI:
     async def download_file(self, file_url: str, output_path: str) -> bool:
         """Faylni URL dan yuklab olish"""
         try:
-            # Agar file_url nisbiy bo'lsa, base_url qo'shish
+            # Nisbiy URL bo'lsa base_url qo'shish
             if file_url.startswith("/"):
                 file_url = f"{self.base_url}{file_url}"
             elif not file_url.startswith("http"):
                 file_url = f"{self.base_url}/{file_url}"
 
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                logger.info(f"Download: {file_url[:80]}...")
+                logger.info(f"Download: {file_url[:100]}...")
 
                 async with session.get(file_url) as response:
                     if response.status == 200:
+                        content = await response.read()
                         with open(output_path, "wb") as f:
-                            f.write(await response.read())
+                            f.write(content)
 
                         file_size = os.path.getsize(output_path)
                         logger.info(f"Saqlandi: {output_path} ({file_size} bytes)")
-                        return True
+                        return file_size > 0
                     else:
                         logger.error(f"Download xato: {response.status}")
                         return False
@@ -252,16 +235,20 @@ class PresentonAPI:
                 logger.error(f"Hali tayyor emas (status: {status})")
                 return False
 
+            # 1. pptxUrl dan yuklab olish
             pptx_url = status_info.get("pptxUrl", "")
             if pptx_url:
-                logger.info("PPTX URL topildi")
+                logger.info(f"PPTX URL topildi: {pptx_url[:80]}")
                 return await self.download_file(pptx_url, output_path)
 
-            # Fallback: presentation_id orqali export qilish
+            # 2. presentation_id orqali eksport
             presentation_id = status_info.get("presentation_id", "")
             if presentation_id:
                 logger.info(f"Export orqali PPTX olish: {presentation_id}")
-                return await self._export_presentation(presentation_id, output_path, "pptx")
+                # Avval prezentatsiya ma'lumotlarini olish
+                pres_data = await self._get_presentation(presentation_id)
+                if pres_data:
+                    return await self._export_pptx(pres_data, output_path)
 
             logger.error("Na pptxUrl, na presentation_id topilmadi")
             return False
@@ -270,26 +257,44 @@ class PresentonAPI:
             logger.error(f"PPTX xato: {e}")
             return False
 
-    async def _export_presentation(self, presentation_id: str, output_path: str, export_as: str = "pptx") -> bool:
-        """Prezentatsiyani eksport qilish"""
+    async def _get_presentation(self, presentation_id: str) -> Optional[Dict]:
+        """Prezentatsiya ma'lumotlarini olish"""
         try:
-            payload = {
-                "id": presentation_id,
-                "export_as": export_as,
-            }
-
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                url = f"{self.base_url}/api/v3/presentation/export"
-                logger.info(f"Export: {url}")
-
-                async with session.post(url, json=payload) as response:
+                url = f"{self.base_url}/api/v1/ppt/presentation/{presentation_id}"
+                async with session.get(url) as response:
                     if response.status == 200:
-                        import json
-                        result = json.loads(await response.text())
-                        file_url = result.get("path", "")
+                        return json.loads(await response.text())
+                    logger.error(f"Presentation olish xato: {response.status}")
+                    return None
+        except Exception as e:
+            logger.error(f"Presentation olish xato: {e}")
+            return None
 
-                        if file_url:
-                            return await self.download_file(file_url, output_path)
+    async def _export_pptx(self, presentation_data: Dict, output_path: str) -> bool:
+        """Prezentatsiyani PPTX ga eksport qilish"""
+        try:
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                url = f"{self.base_url}/api/v1/ppt/presentation/export/pptx"
+                logger.info(f"Export PPTX: {url}")
+
+                async with session.post(url, json=presentation_data) as response:
+                    if response.status == 200:
+                        content_type = response.headers.get("content-type", "")
+
+                        if "application/json" in content_type:
+                            result = json.loads(await response.text())
+                            file_url = result.get("path", "") or result.get("url", "")
+                            if file_url:
+                                return await self.download_file(file_url, output_path)
+                        else:
+                            # To'g'ridan-to'g'ri fayl qaytarilgan
+                            content = await response.read()
+                            with open(output_path, "wb") as f:
+                                f.write(content)
+                            file_size = os.path.getsize(output_path)
+                            logger.info(f"PPTX saqlandi: {output_path} ({file_size} bytes)")
+                            return file_size > 0
 
                     logger.error(f"Export xato: {response.status}")
                     return False
@@ -307,7 +312,6 @@ class PresentonAPI:
     ) -> bool:
         """Generation tayyor bo'lishini kutish"""
         elapsed = 0
-
         logger.info(f"Kutish: max {timeout_seconds}s, interval {check_interval}s")
 
         while elapsed < timeout_seconds:
@@ -433,29 +437,16 @@ TAKLIF:
 
         return text.strip()
 
-    async def get_templates(self) -> Optional[list]:
-        """Mavjud shablonlar ro'yxatini olish"""
+    async def get_themes(self, limit: int = 50) -> Optional[list]:
+        """Shablonlarni olish"""
         try:
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                url = f"{self.base_url}/api/v3/standard-template/all"
-                logger.info(f"Presenton API: GET {url}")
-
+                url = f"{self.base_url}/api/v1/ppt/template-management/summary"
                 async with session.get(url) as response:
                     if response.status == 200:
-                        import json
                         result = json.loads(await response.text())
-                        templates = result if isinstance(result, list) else result.get("data", [])
-                        logger.info(f"{len(templates)} ta shablon topildi")
-                        return templates
-                    else:
-                        logger.error(f"Templates xato ({response.status})")
-                        return None
-
+                        return result if isinstance(result, list) else [result]
+                    return None
         except Exception as e:
             logger.error(f"Templates xato: {e}")
             return None
-
-    # Gamma API bilan mos interface - get_themes ni get_templates ga yo'naltirish
-    async def get_themes(self, limit: int = 50) -> Optional[list]:
-        """Gamma API mos interface - shablonlarni theme sifatida qaytarish"""
-        return await self.get_templates()
