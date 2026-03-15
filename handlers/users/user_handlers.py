@@ -1109,42 +1109,16 @@ async def prices_handler(message: types.Message):
 # ==================== YORDAM ====================
 @dp.message_handler(Text(equals="ℹ️ Yordam"), state='*')
 async def help_handler(message: types.Message):
-    help_text = """
-ℹ️ <b>YORDAM</b>
+    help_text = """ℹ️ <b>Yordam</b>
 
-<b>📋 Buyruqlar:</b>
-/start - Boshlash
-/help - Yordam
+📊 <b>Prezentatsiya</b> — mavzuni yozing, AI professional PPTX tayyorlaydi (3-7 daq)
 
-<b>🎯 Pitch Deck:</b>
-1. "Pitch Deck" tugmasini bosing
-2. 10 ta savolga javob bering
-3. Tasdiqlang
-4. 3-7 daqiqada tayyor!
+📝 <b>Mustaqil ish</b> — referat, kurs ishi, diplom — tayyor DOCX fayl
 
-<b>📊 Prezentatsiya:</b>
-1. "Prezentatsiya" tugmasini bosing
-2. Mavzu kiriting
-3. Slaydlar sonini tanlang
-4. 🎨 Theme tanlang (ixtiyoriy)
-5. Tasdiqlang
-6. 3-7 daqiqada tayyor!
+💳 <b>Balans</b> — "To'ldirish" bosing, summani kiriting, chek yuboring
 
-<b>💳 Balans to'ldirish:</b>
-1. Summani kiriting
-2. Kartaga o'tkazing
-3. Chek yuboring
-4. Admin tasdiqlaydi (5-30 daqiqa)
+🎁 Yangi foydalanuvchilarga 1 ta BEPUL prezentatsiya!
 
-<b>🎁 Bepul prezentatsiya:</b>
-Har bir yangi user 1 ta bepul prezentatsiya oladi!
-
-<b>🤖 Professional AI:</b>
-- AI content yaratadi
-- Professional dizayn
-- PPTX format
-
-❓ Savol: @dostonbek_musurmonov
-"""
+❓ Savol yoki muammo: @dostonbek_musurmonov"""
 
     await message.answer(help_text, parse_mode='HTML')
