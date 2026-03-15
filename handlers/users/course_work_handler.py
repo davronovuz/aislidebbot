@@ -8,7 +8,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, Conte
 from aiogram.utils.exceptions import MessageCantBeEdited, MessageToDeleteNotFound
 
 from loader import dp, bot
-from data.config import OPENAI_API_KEY
+from data.config import GEMINI_API_KEY
 
 # --- IMPORTLAR ---
 from utils.course_work_generator import CourseWorkGenerator
@@ -85,7 +85,7 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         # ---------------------------------------------------------
         # 3. AI GENERATOR (Matn yozish)
         # ---------------------------------------------------------
-        ai_generator = CourseWorkGenerator(api_key=OPENAI_API_KEY)
+        ai_generator = CourseWorkGenerator(api_key=GEMINI_API_KEY)
 
         content_json = await ai_generator.generate_course_work_content(
             work_type=data.get('work_type', 'referat'),
