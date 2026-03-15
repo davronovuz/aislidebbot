@@ -18,7 +18,10 @@ class CourseWorkGenerator:
     """
 
     def __init__(self, api_key: str):
-        self.client = AsyncOpenAI(api_key=api_key)
+        self.client = AsyncOpenAI(
+            api_key=api_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+        )
 
     async def generate_course_work_content(
             self,
@@ -33,7 +36,7 @@ class CourseWorkGenerator:
         """
         Mustaqil ish uchun BATAFSIL content yaratish
         """
-        model = "gpt-4o" if use_gpt4 else "gpt-3.5-turbo"
+        model = "gemini-2.0-flash"
 
         # Til bo'yicha prompt
         lang_instructions = self._get_language_instructions(language)

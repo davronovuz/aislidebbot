@@ -24,10 +24,10 @@ from utils.presenton_api import PresentonAPI
 from utils.presentation_worker import PresentationWorker
 
 # API keys
-OPENAI_API_KEY = env.str("OPENAI_API_KEY")
+GEMINI_API_KEY = env.str("GEMINI_API_KEY")
 
 # Initialize utilities
-content_generator = ContentGenerator(OPENAI_API_KEY)
+content_generator = ContentGenerator(GEMINI_API_KEY)
 presenton_api = PresentonAPI()  # Self-hosted, API key kerak emas
 presentation_worker = None
 

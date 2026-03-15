@@ -44,10 +44,10 @@ class PresentationWorker:
             from environs import Env
             env = Env()
             env.read_env()
-            openai_key = env.str("OPENAI_API_KEY", None)
+            gemini_key = env.str("GEMINI_API_KEY", None)
 
-            if openai_key:
-                self.course_work_generator = CourseWorkGenerator(openai_key)
+            if gemini_key:
+                self.course_work_generator = CourseWorkGenerator(gemini_key)
                 logger.info("✅ CourseWorkGenerator tayyor")
 
             self.docx_generator = DocxGenerator()
