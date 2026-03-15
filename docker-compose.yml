@@ -21,8 +21,9 @@ services:
       - LLM=openai
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL=gpt-4.1
-      - IMAGE_PROVIDER=pexels
-      - PEXELS_API_KEY=${PEXELS_API_KEY:-}
+      - IMAGE_PROVIDER=pixabay
+      - PIXABAY_API_KEY=47108829-cc289c9e8b58aa8bcb4d8a0ff
+      - DISABLE_IMAGE_GENERATION=false
       - CAN_CHANGE_KEYS=false
       - DISABLE_ANONYMOUS_TELEMETRY=true
     volumes:
