@@ -233,7 +233,7 @@ async def start_handler(message: types.Message, state: FSMContext):
 Pastdagi tugmalardan birini tanlang! 👇
 """
 
-        await message.answer(welcome_text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
+        await message.answer(welcome_text, reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db), parse_mode='HTML')
 
     except Exception as e:
         logger.error(f"❌ Start handler xato: {e}")
@@ -495,42 +495,7 @@ Qoladi: {(balance - price):,.0f} so'm
 
 
 # ==================== PREZENTATSIYA ====================
-@dp.message_handler(Text(equals="📊 Prezentatsiya"), state='*')
-async def presentation_start(message: types.Message, state: FSMContext):
-    telegram_id = message.from_user.id
-
-    try:
-        price_per_slide = user_db.get_price('slide_basic')
-        if not price_per_slide:
-            price_per_slide = 2000.0
-
-        balance = user_db.get_user_balance(telegram_id)
-        free_left = user_db.get_free_presentations(telegram_id)
-
-        info_text = f"""
-📊 <b>PREZENTATSIYA YARATISH</b>
-
-💰 <b>Narx:</b> {price_per_slide:,.0f} so'm / slayd
-💳 <b>Balansingiz:</b> {balance:,.0f} so'm
-"""
-
-        if free_left > 0:
-            info_text += f"🎁 <b>Bepul prezentatsiya:</b> {free_left} ta qoldi!\n"
-
-        info_text += "\nQuyidagi tugmani bosib, formani to'ldiring 👇"
-
-        markup = ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add(KeyboardButton(
-            text="📊 Formani ochish",
-            web_app=WebAppInfo(url="https://aislide-frontend.vercel.app/?type=presentation")
-        ))
-        markup.add(KeyboardButton(text="⬅️ Bosh menyu"))
-
-        await message.answer(info_text, reply_markup=markup, parse_mode='HTML')
-
-    except Exception as e:
-        logger.error(f"❌ Presentation start xato: {e}")
-        await message.answer("❌ Xatolik yuz berdi.")
+# WebApp tugma orqali to'g'ridan-to'g'ri ochiladi (main_menu_keyboard'da)
 
 
 @dp.message_handler(state=PresentationStates.waiting_for_topic)

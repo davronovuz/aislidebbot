@@ -1,7 +1,7 @@
 from aiogram import types
 from aiogram.dispatcher.filters.builtin import CommandStart
 from loader import dp, user_db
-from keyboards.default.user_keyboards import main_menu_keyboard  # agar fayl nomi boshqa bo'lsa shu yerda o'zgartir
+from keyboards.default.default_keyboard import main_menu_keyboard
 
 @dp.message_handler(CommandStart())
 async def bot_start(message: types.Message):
@@ -20,4 +20,4 @@ async def bot_start(message: types.Message):
         "Quyidagi menyudan kerakli bo'limni tanlang:"
     )
 
-    await message.answer(text, reply_markup=main_menu_keyboard())
+    await message.answer(text, reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db))

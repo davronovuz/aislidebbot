@@ -5,7 +5,7 @@ import logging
 import asyncio
 from aiogram import types
 from aiogram.dispatcher import FSMContext
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, ContentType
+from aiogram.types import ContentType
 from aiogram.utils.exceptions import MessageCantBeEdited, MessageToDeleteNotFound
 
 from loader import dp, bot, user_db
@@ -19,35 +19,14 @@ logger = logging.getLogger(__name__)
 
 from keyboards.default.default_keyboard import main_menu_keyboard
 
-# Vercel manzilingiz
-WEB_APP_URL = "https://aislide-frontend.vercel.app/"
-WEB_APP_PRESENTATION_URL = "https://aislide-frontend.vercel.app/?type=presentation"
-
-
 # ==============================================================================
-# 1. TUGMA CHIQARISH
-# ==============================================================================
-@dp.message_handler(text="📝 Mustaqil ish")
-async def course_work_start(message: types.Message):
-    markup = ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(KeyboardButton(text="📱 Formani ochish", web_app=WebAppInfo(url=WEB_APP_URL)))
-    markup.add(KeyboardButton(text="⬅️ Bosh menyu"))
-
-    await message.answer(
-        "📝 <b>Mustaqil ish / Referat yaratish (BEPUL)</b>\n\n"
-        "AI yordamida professional hujjat tayyorlash uchun quyidagi tugmani bosing va ma'lumotlarni kiriting 👇",
-        reply_markup=markup, parse_mode='HTML'
-    )
-
-
-# ==============================================================================
-# 2. BOSH MENYUGA QAYTISH
+# 1. BOSH MENYUGA QAYTISH
 # ==============================================================================
 @dp.message_handler(text="⬅️ Bosh menyu")
 async def back_to_main_menu(message: types.Message):
     await message.answer(
         "🏠 <b>Bosh menyu</b>",
-        reply_markup=main_menu_keyboard(),  # <-- () qo'shildi
+        reply_markup=main_menu_keyboard(telegram_id=message.from_user.id, user_db=user_db),
         parse_mode='HTML'
     )
 
@@ -67,7 +46,7 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         logger.error(f"Web App data error: {e}")
         await message.answer(
             "❌ Ma'lumotni o'qishda xatolik yuz berdi.",
-            reply_markup=main_menu_keyboard()  # <-- () qo'shildi
+            reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db)
         )
         return
 
@@ -120,7 +99,7 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
             except:
                 await message.answer("❌ AI generatsiya qila olmadi. Qaytadan urinib ko'ring.")
 
-            await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard())  # <-- ()
+            await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db))
             return
 
         # ---------------------------------------------------------
@@ -153,7 +132,7 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         if not success:
             await message.answer(
                 "❌ Fayl yaratishda xatolik bo'ldi.",
-                reply_markup=main_menu_keyboard()  # <-- ()
+                reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db)
             )
             return
 
@@ -164,7 +143,7 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
             document=types.InputFile(file_path),
             caption=f"✅ <b>Tayyor!</b>\n\n📄 <b>Mavzu:</b> {topic}\n👤 <b>Siz uchun maxsus tayyorlandi.</b>",
             parse_mode='HTML',
-            reply_markup=main_menu_keyboard()  # <-- ()
+            reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db)
         )
 
         # 7. Tozalash
@@ -185,7 +164,7 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         except:
             await message.answer("❌ Tizimda kutilmagan xatolik yuz berdi. Adminga xabar bering.")
 
-        await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard())
+        await message.answer("🏠 Bosh menyu:", reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db))
 
 
 # ==============================================================================
@@ -215,13 +194,13 @@ async def _handle_presentation_web_data(message: types.Message, data: dict):
                 await message.answer(
                     f"❌ <b>Balans yetarli emas!</b>\n\n"
                     f"Kerakli: {total_price:,.0f} so'm\nSizda: {balance:,.0f} so'm",
-                    parse_mode='HTML', reply_markup=main_menu_keyboard()
+                    parse_mode='HTML', reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db)
                 )
                 return
 
             success = user_db.deduct_from_balance(telegram_id, total_price)
             if not success:
-                await message.answer("❌ Balansdan yechishda xatolik!", reply_markup=main_menu_keyboard())
+                await message.answer("❌ Balansdan yechishda xatolik!", reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db))
                 return
 
             user_db.create_transaction(
@@ -246,7 +225,7 @@ async def _handle_presentation_web_data(message: types.Message, data: dict):
         if not task_id:
             if not is_free and amount_charged > 0:
                 user_db.add_to_balance(telegram_id, amount_charged)
-            await message.answer("❌ Task yaratishda xatolik!", reply_markup=main_menu_keyboard())
+            await message.answer("❌ Task yaratishda xatolik!", reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db))
             return
 
         if is_free:
@@ -266,9 +245,9 @@ async def _handle_presentation_web_data(message: types.Message, data: dict):
                 f"⏳ <b>3-7 daqiqa</b>. Tayyor bo'lgach PPTX yuboriladi! 🎉"
             )
 
-        await message.answer(text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
+        await message.answer(text, reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db), parse_mode='HTML')
         logger.info(f"✅ Web prezentatsiya task: {task_uuid} | User: {telegram_id} | Free: {is_free}")
 
     except Exception as e:
         logger.error(f"❌ Web prezentatsiya xato: {e}")
-        await message.answer("❌ Xatolik yuz berdi!", reply_markup=main_menu_keyboard())
+        await message.answer("❌ Xatolik yuz berdi!", reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db))
