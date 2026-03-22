@@ -169,6 +169,9 @@ class DocxGenerator:
         para_format.first_line_indent = self.FIRST_LINE_INDENT
         para_format.space_after = Pt(0)
         para_format.space_before = Pt(0)
+        para_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY  # GOST: ikki tomonlama tekislash
+        para_format.widow_control = True  # Yetim qatorlarni oldini olish
+        para_format.keep_together = False
 
         # Heading 1 - Bob sarlavhasi
         if 'Heading 1' in doc.styles:
@@ -181,6 +184,8 @@ class DocxGenerator:
             h1.paragraph_format.space_before = Pt(0)
             h1.paragraph_format.space_after = Pt(12)
             h1.paragraph_format.first_line_indent = Cm(0)
+            h1.paragraph_format.keep_with_next = True  # Sarlavha keyingi paragrafdan ajralmasin
+            h1.paragraph_format.page_break_before = False
 
         # Heading 2 - Bo'lim sarlavhasi
         if 'Heading 2' in doc.styles:
@@ -193,6 +198,7 @@ class DocxGenerator:
             h2.paragraph_format.space_before = Pt(12)
             h2.paragraph_format.space_after = Pt(6)
             h2.paragraph_format.first_line_indent = Cm(0)
+            h2.paragraph_format.keep_with_next = True  # Sarlavha keyingi paragrafdan ajralmasin
 
         # List Bullet stili yaratish yoki sozlash
         try:

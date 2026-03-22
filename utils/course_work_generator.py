@@ -326,7 +326,11 @@ MUHIM QOIDALAR:
 5. Kamida {min_words} so'z yozing - QISQARTIRMANG!
 6. Ilmiy akademik uslubda yozing
 7. Haqiqiy faktlar, statistika, misollar keltiring
-8. {subject} sohasidagi eng so'nggi ma'lumotlarni yozing"""
+8. {subject} sohasidagi eng so'nggi ma'lumotlarni yozing
+9. Har 2-3 paragrafda MANBA iqtibosi keltiring (masalan: "Professor X.Y.ning ta'kidlashicha...", "Tadqiqotlar shuni ko'rsatadiki...")
+10. Raqamli ma'lumotlar (foizlar, yillar, statistika) MAJBURIY ishlatilsin
+11. O'zbekiston kontekstida misollar keltiring
+12. Paragraflar bir-biri bilan MANTIQIY bog'langan bo'lsin — oldingi paragrafdan keyingisiga o'tish tabiiy bo'lsin"""
                     },
                     {"role": "user", "content": prompt}
                 ],

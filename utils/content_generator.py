@@ -93,11 +93,20 @@ SLAYDLAR SONI: {slide_count}
 
 MUHIM QOIDALAR:
 1. Har bir slayd QISQA va TA'SIRLI bo'lsin — slaydda KO'P MATN BO'LMASIN
-2. Bullet pointlar 1 qator, maksimum 10-12 so'z
+2. Bullet pointlar MAKSIMUM 4-5 ta, har biri 1 qator (8-10 so'z)
 3. Slayd sarlavhasi qisqa va kuchli bo'lsin (3-6 so'z)
-4. Content 2-3 jumla, ortiq emas
-5. Har bir slaydga INGLIZ TILIDAGI image_keyword bering — Pixabay dan rasm qidirish uchun (masalan: "technology innovation", "education classroom", "business growth chart")
-6. image_keyword mavzuga TO'G'RI MOS kelsin, abstrakt emas
+4. Content 2-3 jumla, ortiq emas (har bir jumla 15 so'zdan oshmasin)
+
+RASM KALIT SO'ZLARI QOIDALARI (JUDA MUHIM):
+- Har bir slaydga 3 ta INGLIZ tilidagi kalit so'z bering: primary, secondary, fallback
+- primary: ANIQ, FOTOGRAFIYA QILINADIGAN narsa — 2-3 so'z. Masalan: "students classroom desks", "doctor examining patient", "solar panels rooftop"
+- secondary: Biroz kengroq — 2 so'z. Masalan: "education learning", "medical clinic", "renewable energy"
+- fallback: Bitta oddiy so'z garantiya natija uchun: "school", "hospital", "energy"
+- HECH QACHON abstrakt so'zlar ISHLATMANG: "innovation", "synergy", "strategy", "paradigm", "transformation", "concept"
+- O'zingizdan so'rang: "Fotograf bu narsani SURATGA ola oladimi?" Agar yo'q — so'zni almashtiring
+- YOMON: "digital transformation" → YAXSHI: "person laptop modern office"
+- YOMON: "economic growth" → YAXSHI: "financial chart green arrow up"
+- YOMON: "education innovation" → YAXSHI: "teacher whiteboard classroom students"
 
 JSON formatida qaytaring:
 {{
@@ -106,10 +115,14 @@ JSON formatida qaytaring:
   "slides": [
     {{
       "slide_number": 1,
-      "title": "Qisqa sarlavha",
+      "title": "Qisqa sarlavha (3-6 so'z)",
       "content": "2-3 jumla bilan asosiy fikr",
       "bullet_points": ["Qisqa nuqta 1", "Qisqa nuqta 2", "Qisqa nuqta 3"],
-      "image_keyword": "relevant english keyword for pixabay"
+      "image_keywords": {{
+        "primary": "specific two-word photographable scene",
+        "secondary": "broader visual concept",
+        "fallback": "single common noun"
+      }}
     }}
   ]
 }}
@@ -124,7 +137,7 @@ JSON formatida qaytaring:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Siz professional prezentatsiya yaratuvchisiz. Slaydlar QISQA va TA'SIRLI bo'lsin — ko'p matn yozmaslik kerak. O'zbek tilida javob bering. image_keyword INGLIZ tilida bo'lsin."
+                        "content": "Siz professional prezentatsiya yaratuvchisiz. Slaydlar QISQA va TA'SIRLI bo'lsin — ko'p matn yozmaslik kerak. O'zbek tilida javob bering. image_keywords INGLIZ tilida bo'lsin. Rasm kalit so'zlari ANIQ va FOTOGRAFIYA QILINADIGAN bo'lsin — abstrakt tushunchalar emas, balki real ob'ektlar va sahnalar."
                     },
                     {
                         "role": "user",
@@ -265,23 +278,37 @@ JSON qaytaring:
         """Fallback prezentatsiya content"""
         slides = []
 
+        # Mavzudan kalit so'z yaratish
+        topic_words = topic.lower().split()
+        base_keyword = topic_words[0] if topic_words else "presentation"
+
         slides.append({
             "slide_number": 1,
             "title": topic,
-            "content": f"{topic} haqida professional prezentatsiya. {details[:100]}",
-            "bullet_points": []
+            "content": f"{topic} haqida professional prezentatsiya.",
+            "bullet_points": [],
+            "image_keywords": {
+                "primary": f"{base_keyword} presentation cover",
+                "secondary": f"{base_keyword} concept",
+                "fallback": "presentation"
+            }
         })
 
         for i in range(2, slide_count + 1):
             slides.append({
                 "slide_number": i,
                 "title": f"{topic} - Bo'lim {i - 1}",
-                "content": f"{topic} ning {i - 1}-qismi. {details[:50]}",
+                "content": f"{topic} ning {i - 1}-qismi.",
                 "bullet_points": [
-                    f"Birinchi nuqta: {topic} asosiy jihati",
-                    f"Ikkinchi nuqta: Amaliy qo'llanilishi",
-                    f"Uchinchi nuqta: Kelajak istiqbollari"
-                ]
+                    f"{topic} asosiy jihati",
+                    f"Amaliy qo'llanilishi",
+                    f"Kelajak istiqbollari"
+                ],
+                "image_keywords": {
+                    "primary": f"{base_keyword} analysis chart",
+                    "secondary": f"{base_keyword} data",
+                    "fallback": "business"
+                }
             })
 
         return {

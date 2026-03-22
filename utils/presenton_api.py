@@ -426,7 +426,9 @@ TAKLIF:
             slide_title = slide.get("title", "")
             slide_content = slide.get("content", "")
             bullet_points = slide.get("bullet_points", [])
-            image_keyword = slide.get("image_keyword", "")
+
+            # 3-bosqichli rasm kalit so'zlarini olish
+            image_keyword = self._get_best_image_keyword(slide)
 
             text += f"## {slide_title}\n"
 
@@ -434,7 +436,7 @@ TAKLIF:
                 text += f"{slide_content}\n"
 
             if bullet_points:
-                for point in bullet_points:
+                for point in bullet_points[:5]:  # Maksimum 5 ta bullet
                     text += f"• {point}\n"
 
             if image_keyword:
@@ -443,6 +445,21 @@ TAKLIF:
             text += "\n"
 
         return text.strip()
+
+    @staticmethod
+    def _get_best_image_keyword(slide: Dict) -> str:
+        """3-bosqichli rasm kalit so'zini olish (primary → secondary → fallback)"""
+        # Yangi format: image_keywords dict
+        image_keywords = slide.get("image_keywords")
+        if image_keywords and isinstance(image_keywords, dict):
+            primary = image_keywords.get("primary", "")
+            secondary = image_keywords.get("secondary", "")
+            fallback = image_keywords.get("fallback", "")
+            # Eng yaxshisini qaytarish
+            return primary or secondary or fallback
+
+        # Eski format: image_keyword string (backward compatibility)
+        return slide.get("image_keyword", "")
 
     async def get_themes(self, limit: int = 50) -> Optional[list]:
         """Shablonlarni olish"""
