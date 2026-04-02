@@ -480,6 +480,8 @@ Muvaffaqiyatlar! 🚀
 
             # User'ga yuborish
             if telegram_id:
+                file_size = os.path.getsize(output_path)
+                logger.info(f"PPTX Telegram'ga yuborilmoqda: {output_path} ({file_size} bytes)")
                 try:
                     with open(output_path, 'rb') as f:
                         type_name = "Pitch Deck" if task_type == 'pitch_deck' else "Prezentatsiya"
@@ -491,7 +493,9 @@ Muvaffaqiyatlar! 🚀
                             caption=f"🎉 <b>{type_name} tayyor!</b>{theme_caption}\n\nMuvaffaqiyatlar! 🚀",
                             parse_mode='HTML'
                         )
+                    logger.info(f"✅ PPTX muvaffaqiyatli yuborildi: {file_size} bytes")
                 except Exception as e:
+                    logger.error(f"❌ Telegram send_document xato ({type(e).__name__}): {e}")
                     raise
 
             self.user_db.update_task_status(task_uuid, 'completed', progress=100, file_path=output_path)

@@ -148,7 +148,7 @@ class PresentonAPI:
 
                     if response.status == 200:
                         result = json.loads(response_text)
-                        logger.info(f"Status: {str(result)[:500]}")
+                        logger.info(f"Status to'liq javob: {json.dumps(result)[:800]}")
 
                         status = result.get("status", "unknown")
 
@@ -164,14 +164,44 @@ class PresentonAPI:
                         }
                         mapped_status = status_map.get(status, status)
 
-                        # PPTX URL olish
+                        # PPTX URL olish — Presenton turli formatda qaytarishi mumkin
                         pptx_url = ""
                         presentation_id = ""
 
-                        data = result.get("data") or result
+                        # Top-level tekshirish
+                        pptx_url = (
+                            result.get("path", "") or
+                            result.get("pptx_url", "") or
+                            result.get("export_url", "") or
+                            result.get("pptx_path", "") or
+                            result.get("file_url", "") or
+                            result.get("download_url", "")
+                        )
+                        presentation_id = (
+                            result.get("presentation_id", "") or
+                            result.get("id", "") or
+                            result.get("task_id", "")
+                        )
+
+                        # "data" ichida tekshirish
+                        data = result.get("data")
                         if isinstance(data, dict):
-                            pptx_url = data.get("path", "") or data.get("pptx_url", "") or data.get("export_url", "")
-                            presentation_id = data.get("presentation_id", "") or data.get("id", "")
+                            if not pptx_url:
+                                pptx_url = (
+                                    data.get("path", "") or
+                                    data.get("pptx_url", "") or
+                                    data.get("export_url", "") or
+                                    data.get("pptx_path", "") or
+                                    data.get("file_url", "") or
+                                    data.get("download_url", "")
+                                )
+                            if not presentation_id:
+                                presentation_id = (
+                                    data.get("presentation_id", "") or
+                                    data.get("id", "")
+                                )
+
+                        logger.info(f"pptx_url='{pptx_url}', presentation_id='{presentation_id}'")
 
                         return {
                             "status": mapped_status,
@@ -192,7 +222,7 @@ class PresentonAPI:
             return None
 
     async def download_file(self, file_url: str, output_path: str) -> bool:
-        """Faylni URL dan yuklab olish"""
+        """Faylni URL dan yuklab olish (streaming)"""
         try:
             # Nisbiy URL bo'lsa base_url qo'shish
             if file_url.startswith("/"):
@@ -200,24 +230,40 @@ class PresentonAPI:
             elif not file_url.startswith("http"):
                 file_url = f"{self.base_url}/{file_url}"
 
-            async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                logger.info(f"Download: {file_url[:100]}...")
+            # Download uchun alohida timeout (uzoqroq)
+            download_timeout = aiohttp.ClientTimeout(total=300, sock_read=120)
+
+            async with aiohttp.ClientSession(timeout=download_timeout) as session:
+                logger.info(f"Download (streaming): {file_url[:100]}...")
 
                 async with session.get(file_url) as response:
                     if response.status == 200:
-                        content = await response.read()
+                        total = 0
                         with open(output_path, "wb") as f:
-                            f.write(content)
+                            async for chunk in response.content.iter_chunked(65536):
+                                f.write(chunk)
+                                total += len(chunk)
 
                         file_size = os.path.getsize(output_path)
                         logger.info(f"Saqlandi: {output_path} ({file_size} bytes)")
                         return file_size > 0
                     else:
-                        logger.error(f"Download xato: {response.status}")
+                        resp_text = await response.text()
+                        logger.error(f"Download xato ({response.status}): {resp_text[:200]}")
                         return False
 
+        except asyncio.TimeoutError:
+            logger.error(f"Download timeout: {file_url[:80]}")
+            return False
+        except aiohttp.ClientPayloadError as e:
+            logger.error(f"Download payload xato (qisman yuklangan fayl): {e}")
+            # Agar fayl qisman yuklangan bo'lsa ham tekshirib ko'ramiz
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 10240:
+                logger.warning("Qisman yuklangan fayl ishlatiladi")
+                return True
+            return False
         except Exception as e:
-            logger.error(f"Download xato: {e}")
+            logger.error(f"Download xato ({type(e).__name__}): {e}")
             return False
 
     async def download_pptx(self, generation_id: str, output_path: str) -> bool:
@@ -274,33 +320,69 @@ class PresentonAPI:
     async def _export_pptx(self, presentation_data: Dict, output_path: str) -> bool:
         """Prezentatsiyani PPTX ga eksport qilish"""
         try:
-            async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                url = f"{self.base_url}/api/v1/ppt/presentation/export/pptx"
-                logger.info(f"Export PPTX: {url}")
+            # Avval faqat ID bilan eksport qilib ko'ramiz
+            pres_id = (
+                presentation_data.get("presentation_id") or
+                presentation_data.get("id") or
+                presentation_data.get("task_id")
+            )
 
-                async with session.post(url, json=presentation_data) as response:
+            # Agar presentation_data ichida "data" bo'lsa
+            inner = presentation_data.get("data") or {}
+            if isinstance(inner, dict) and not pres_id:
+                pres_id = inner.get("presentation_id") or inner.get("id")
+
+            export_timeout = aiohttp.ClientTimeout(total=300, sock_read=120)
+
+            async with aiohttp.ClientSession(timeout=export_timeout) as session:
+                url = f"{self.base_url}/api/v1/ppt/presentation/export/pptx"
+                logger.info(f"Export PPTX: {url}, pres_id={pres_id}")
+
+                # Faqat ID yuboramiz (to'liq data emas)
+                payload = {"presentation_id": pres_id} if pres_id else presentation_data
+
+                async with session.post(url, json=payload) as response:
                     if response.status == 200:
                         content_type = response.headers.get("content-type", "")
+                        logger.info(f"Export content-type: {content_type}")
 
                         if "application/json" in content_type:
                             result = json.loads(await response.text())
-                            file_url = result.get("path", "") or result.get("url", "")
+                            logger.info(f"Export JSON javob: {str(result)[:300]}")
+                            file_url = (
+                                result.get("path", "") or
+                                result.get("url", "") or
+                                result.get("pptx_url", "") or
+                                result.get("download_url", "")
+                            )
                             if file_url:
                                 return await self.download_file(file_url, output_path)
                         else:
-                            # To'g'ridan-to'g'ri fayl qaytarilgan
-                            content = await response.read()
+                            # To'g'ridan-to'g'ri fayl (streaming)
+                            total = 0
                             with open(output_path, "wb") as f:
-                                f.write(content)
+                                async for chunk in response.content.iter_chunked(65536):
+                                    f.write(chunk)
+                                    total += len(chunk)
                             file_size = os.path.getsize(output_path)
                             logger.info(f"PPTX saqlandi: {output_path} ({file_size} bytes)")
                             return file_size > 0
 
-                    logger.error(f"Export xato: {response.status}")
+                    resp_text = await response.text()
+                    logger.error(f"Export xato ({response.status}): {resp_text[:300]}")
                     return False
 
+        except asyncio.TimeoutError:
+            logger.error("Export timeout")
+            return False
+        except aiohttp.ClientPayloadError as e:
+            logger.error(f"Export payload xato: {e}")
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 10240:
+                logger.warning("Qisman yuklangan PPTX ishlatiladi")
+                return True
+            return False
         except Exception as e:
-            logger.error(f"Export xato: {e}")
+            logger.error(f"Export xato ({type(e).__name__}): {e}")
             return False
 
     async def wait_for_completion(

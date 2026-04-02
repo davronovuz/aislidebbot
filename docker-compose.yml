@@ -20,7 +20,7 @@ services:
     environment:
       - LLM=openai
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=gpt-4.1
+      - OPENAI_MODEL=gpt-4o
       - IMAGE_PROVIDER=pixabay
       - PIXABAY_API_KEY=55035509-1ebd34a223dc6250ad4e44b3c
       - DISABLE_IMAGE_GENERATION=false
