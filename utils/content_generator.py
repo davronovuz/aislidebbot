@@ -85,49 +85,55 @@ class ContentGenerator:
         """
         model = "gpt-4o"
 
-        prompt = f"""Siz professional prezentatsiya dizayneri va kontent yaratuvchisisiz.
+        prompt = f"""Siz tajribali prezentatsiya mutaxassisisiz. Professional, batafsil va mazmunli prezentatsiya kontent yarating.
 
 MAVZU: {topic}
-QO'SHIMCHA: {details or "Yo'q"}
+QO'SHIMCHA MA'LUMOT: {details or "Yo'q"}
 SLAYDLAR SONI: {slide_count}
 
-MUHIM QOIDALAR:
-1. Har bir slayd QISQA va TA'SIRLI bo'lsin — slaydda KO'P MATN BO'LMASIN
-2. Bullet pointlar MAKSIMUM 4-5 ta, har biri 1 qator (8-10 so'z)
-3. Slayd sarlavhasi qisqa va kuchli bo'lsin (3-6 so'z)
-4. Content 2-3 jumla, ortiq emas (har bir jumla 15 so'zdan oshmasin)
+KONTENT QOIDALARI:
+1. Har bir slayd sarlavhasi aniq va tushunarli bo'lsin (4-8 so'z)
+2. Har bir slayd uchun "content" maydoni — 3-5 ta to'liq jumla yozing. Bu slaydning asosiy matni. Har bir jumla ma'noli va informativ bo'lsin. Mavzuni chuqur yoritib bering.
+3. Har bir slaydda 5-7 ta bullet_points bo'lsin. Har bir bullet — 1-2 jumla, batafsil va foydali ma'lumot. Oddiy ro'yxat emas, balki har biri mustaqil fikr bo'lsin.
+4. Slaydlar orasida mantiqiy bog'lanish bo'lsin — bir slayd ikkinchisiga olib borsin.
+5. Kirish slaydida mavzuning dolzarbligi va maqsadi yozilsin.
+6. Xulosa slaydida asosiy xulosalar va takliflar bo'lsin.
+7. O'rtadagi slaydlarda mavzuning turli jihatlarini batafsil yoritib bering.
 
-RASM KALIT SO'ZLARI QOIDALARI (JUDA MUHIM):
-- Har bir slaydga 3 ta INGLIZ tilidagi kalit so'z bering: primary, secondary, fallback
-- primary: ANIQ, FOTOGRAFIYA QILINADIGAN narsa — 2-3 so'z. Masalan: "students classroom desks", "doctor examining patient", "solar panels rooftop"
-- secondary: Biroz kengroq — 2 so'z. Masalan: "education learning", "medical clinic", "renewable energy"
-- fallback: Bitta oddiy so'z garantiya natija uchun: "school", "hospital", "energy"
-- HECH QACHON abstrakt so'zlar ISHLATMANG: "innovation", "synergy", "strategy", "paradigm", "transformation", "concept"
-- O'zingizdan so'rang: "Fotograf bu narsani SURATGA ola oladimi?" Agar yo'q — so'zni almashtiring
-- YOMON: "digital transformation" → YAXSHI: "person laptop modern office"
-- YOMON: "economic growth" → YAXSHI: "financial chart green arrow up"
-- YOMON: "education innovation" → YAXSHI: "teacher whiteboard classroom students"
+RASM KALIT SO'ZLARI (INGLIZ TILIDA):
+- Har bir slaydga 3 ta kalit so'z: primary, secondary, fallback
+- primary: ANIQ, FOTOGRAFIYA QILINADIGAN narsa (2-3 so'z). Masalan: "students classroom desks", "doctor examining patient", "solar panels rooftop"
+- secondary: Kengroq tushuncha (2 so'z). Masalan: "education learning", "medical clinic"
+- fallback: Bitta oddiy so'z: "school", "hospital", "energy"
+- ABSTRAKT so'zlar ISHLATMANG: "innovation", "synergy", "strategy", "paradigm"
+- Test: "Fotograf buni suratga ola oladimi?" Agar yo'q — almashtiring
 
 JSON formatida qaytaring:
 {{
-  "title": "Prezentatsiya sarlavhasi",
-  "subtitle": "Qisqa tavsif (1 jumla)",
+  "title": "Prezentatsiya sarlavhasi (ta'sirli, 5-10 so'z)",
+  "subtitle": "Mavzuning qisqa tavsifi (1-2 jumla)",
   "slides": [
     {{
       "slide_number": 1,
-      "title": "Qisqa sarlavha (3-6 so'z)",
-      "content": "2-3 jumla bilan asosiy fikr",
-      "bullet_points": ["Qisqa nuqta 1", "Qisqa nuqta 2", "Qisqa nuqta 3"],
+      "title": "Slayd sarlavhasi (4-8 so'z)",
+      "content": "3-5 ta to'liq jumla. Batafsil, informativ matn. Mavzuni chuqur yoritib bering.",
+      "bullet_points": [
+        "Birinchi nuqta — 1-2 jumla bilan batafsil tushuntiring",
+        "Ikkinchi nuqta — aniq ma'lumot yoki fakt keltiring",
+        "Uchinchi nuqta — amaliy misol yoki dalil",
+        "To'rtinchi nuqta — qo'shimcha ma'lumot",
+        "Beshinchi nuqta — muhim jihat"
+      ],
       "image_keywords": {{
-        "primary": "specific two-word photographable scene",
-        "secondary": "broader visual concept",
-        "fallback": "single common noun"
+        "primary": "aniq fotografiya qilinadigan sahna",
+        "secondary": "kengroq vizual tushuncha",
+        "fallback": "oddiy so'z"
       }}
     }}
   ]
 }}
 
-{slide_count} ta slayd yarating. Birinchi slayd — kirish, oxirgi — xulosa."""
+{slide_count} ta slayd yarating. Birinchi — kirish, oxirgi — xulosa. HAR BIR SLAYD BATAFSIL BO'LSIN!"""
 
         try:
             logger.info(f"OpenAI: Prezentatsiya content yaratish (model: {model})")
@@ -137,14 +143,14 @@ JSON formatida qaytaring:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Siz professional prezentatsiya yaratuvchisiz. Slaydlar QISQA va TA'SIRLI bo'lsin — ko'p matn yozmaslik kerak. O'zbek tilida javob bering. image_keywords INGLIZ tilida bo'lsin. Rasm kalit so'zlari ANIQ va FOTOGRAFIYA QILINADIGAN bo'lsin — abstrakt tushunchalar emas, balki real ob'ektlar va sahnalar."
+                        "content": "Siz professional prezentatsiya mutaxassisisiz. BATAFSIL, MAZMUNLI va INFORMATIV kontent yarating. Har bir slayd to'liq ma'lumotga ega bo'lsin — kam matn yozish MUMKIN EMAS. O'zbek tilida professional uslubda yozing. image_keywords INGLIZ tilida. Har bir bullet_point 1-2 jumla bo'lsin, oddiy ro'yxat emas."
                     },
                     {
                         "role": "user",
                         "content": prompt
                     }
                 ],
-                max_tokens=4000,
+                max_tokens=8000,
                 temperature=0.7,
                 response_format={"type": "json_object"}
             )

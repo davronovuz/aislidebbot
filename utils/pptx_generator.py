@@ -255,10 +255,8 @@ class ProPPTXGenerator:
             True — muvaffaqiyatli
         """
         try:
-            # 1. Rasmlarni yuklab olish (agar kalit berilgan bo'lsa)
-            images = {}
-            if pixabay_api_key:
-                images = await self._fetch_images(content, pixabay_api_key)
+            # 1. Rasmlarni yuklab olish (Unsplash bepul, Pixabay fallback)
+            images = await self._fetch_images(content, pixabay_api_key)
 
             # 2. PPTX yaratish
             self._build(content, images, output_path)
@@ -363,8 +361,12 @@ class ProPPTXGenerator:
 
     def _create_content_slide(self, data: Dict, variant: int, image_path: str = None):
         """Content slayd — layout variant tanlash"""
-        if image_path and os.path.exists(image_path) and variant != 2:
-            self._create_image_content_slide(data, image_path)
+        if image_path and os.path.exists(image_path):
+            # Rasmli variant — alternativ layoutlar
+            if variant == 1:
+                self._create_card_slide(data, image_path)
+            else:
+                self._create_image_content_slide(data, image_path)
         elif variant == 0:
             self._create_standard_slide(data)
         elif variant == 1:
@@ -428,8 +430,8 @@ class ProPPTXGenerator:
         self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.06),
                         SLIDE_W, Inches(0.06), t["accent"])
 
-    def _create_card_slide(self, data: Dict):
-        """Card layout — kontent karta ichida, soyali"""
+    def _create_card_slide(self, data: Dict, image_path: str = None):
+        """Card layout — kontent karta ichida, soyali, ixtiyoriy rasm"""
         slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
         t = self.theme
 
@@ -451,19 +453,60 @@ class ProPPTXGenerator:
         self._add_rect(slide, Inches(0.8), Inches(1.3),
                         Inches(3), Inches(0.06), t["accent"])
 
-        # Card — rounded rect, shadow bilan
-        card = self._add_rounded_rect(
-            slide,
-            x=Inches(0.6), y=Inches(1.75),
-            w=Inches(12.1), h=Inches(5.2),
-            fill=t["card_bg"],
-            border_color=t.get("card_border"),
-            shadow=True,
-        )
+        # Rasmli yoki rasmsiz karta
+        has_image = image_path and os.path.exists(image_path)
 
-        # Kartaning chap tomonida accent chiziq
-        self._add_rect(slide, Inches(0.6), Inches(1.75),
-                        Inches(0.07), Inches(5.2), t["accent"])
+        if has_image:
+            # Rasm o'ng tomonda, karta chapda
+            card = self._add_rounded_rect(
+                slide,
+                x=Inches(0.6), y=Inches(1.75),
+                w=Inches(7.5), h=Inches(5.2),
+                fill=t["card_bg"],
+                border_color=t.get("card_border"),
+                shadow=True,
+            )
+            self._add_rect(slide, Inches(0.6), Inches(1.75),
+                            Inches(0.07), Inches(5.2), t["accent"])
+
+            # Rasm
+            img_frame = self._add_rounded_rect(
+                slide,
+                x=Inches(8.5), y=Inches(1.75),
+                w=Inches(4.3), h=Inches(5.2),
+                fill=t["card_bg"],
+                border_color=t.get("card_border"),
+                shadow=True,
+            )
+            try:
+                slide.shapes.add_picture(
+                    image_path,
+                    left=Inches(8.65), top=Inches(1.9),
+                    width=Inches(4.0), height=Inches(4.9),
+                )
+            except Exception as e:
+                logger.warning(f"Rasm qo'shishda xato: {e}")
+
+            content_w = Inches(6.5)
+            content_x = Inches(1.3)
+            bullet_x = Inches(1.5)
+            bullet_w = Inches(6.0)
+        else:
+            card = self._add_rounded_rect(
+                slide,
+                x=Inches(0.6), y=Inches(1.75),
+                w=Inches(12.1), h=Inches(5.2),
+                fill=t["card_bg"],
+                border_color=t.get("card_border"),
+                shadow=True,
+            )
+            self._add_rect(slide, Inches(0.6), Inches(1.75),
+                            Inches(0.07), Inches(5.2), t["accent"])
+
+            content_w = Inches(10.7)
+            content_x = Inches(1.3)
+            bullet_x = Inches(1.5)
+            bullet_w = Inches(10.2)
 
         # Card ichida content
         content = data.get("content", "")
@@ -473,8 +516,8 @@ class ProPPTXGenerator:
         if content:
             self._add_textbox(
                 slide, content,
-                x=Inches(1.3), y=y,
-                w=Inches(10.7), h=Inches(1.5),
+                x=content_x, y=y,
+                w=content_w, h=Inches(1.5),
                 font_size=17, bold=False,
                 color=t["body_text"],
                 line_spacing=1.4,
@@ -484,8 +527,8 @@ class ProPPTXGenerator:
         if bullets:
             self._add_bullet_textbox(
                 slide, bullets,
-                x=Inches(1.5), y=y,
-                w=Inches(10.2), h=Inches(3.0),
+                x=bullet_x, y=y,
+                w=bullet_w, h=Inches(3.0),
                 font_size=16, color=t["body_text"],
                 bullet_color=t["bullet_accent"],
             )
@@ -982,13 +1025,22 @@ class ProPPTXGenerator:
 
     # ======================== IMAGE FETCHING ========================
 
-    async def _fetch_images(self, content: Dict, api_key: str) -> Dict[int, str]:
-        """Pixabay dan rasmlar yuklab olish — har bir slayd uchun"""
+    async def _fetch_images(self, content: Dict, api_key: str = None) -> Dict[int, str]:
+        """Rasmlar yuklab olish — Pixabay (asosiy) + Picsum (fallback)"""
         images = {}
         slides = content.get("slides", [])
 
-        timeout = aiohttp.ClientTimeout(total=30)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        timeout = aiohttp.ClientTimeout(total=45)
+        # SSL sozlamasi — ba'zi serverlarda sertifikat muammosi bo'lishi mumkin
+        try:
+            import ssl
+            import certifi
+            ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+            connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+        except Exception:
+            connector = aiohttp.TCPConnector(ssl=False)
+
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
             tasks = []
             for i, slide in enumerate(slides):
                 keywords = slide.get("image_keywords", {})
@@ -1007,13 +1059,22 @@ class ProPPTXGenerator:
 
     async def _fetch_slide_image(self, session, api_key: str,
                                   slide_idx: int, keywords: Dict) -> Tuple[int, Optional[str]]:
-        """Bitta slayd uchun rasm yuklab olish — 3 bosqichli fallback"""
+        """Bitta slayd uchun rasm yuklab olish — Pixabay (asosiy) + Picsum (fallback)"""
+        import urllib.parse
+
         for key_type in ["primary", "secondary", "fallback"]:
             keyword = keywords.get(key_type, "")
             if not keyword:
                 continue
 
-            img_path = await self._download_pixabay_image(session, api_key, keyword)
+            # 1. Pixabay — asosiy (mavzuga mos, professional)
+            if api_key:
+                img_path = await self._download_pixabay_image(session, api_key, keyword)
+                if img_path:
+                    return (slide_idx, img_path)
+
+            # 2. Picsum — fallback (har doim ishlaydi, lekin random)
+            img_path = await self._download_picsum_image(session, keyword)
             if img_path:
                 return (slide_idx, img_path)
 
@@ -1021,15 +1082,17 @@ class ProPPTXGenerator:
 
     async def _download_pixabay_image(self, session, api_key: str,
                                        keyword: str) -> Optional[str]:
-        """Pixabay API dan bitta rasm yuklab olish"""
+        """Pixabay API dan professional rasm yuklab olish"""
         try:
+            import urllib.parse
+            encoded_kw = urllib.parse.quote(keyword)
             search_url = (
                 f"https://pixabay.com/api/"
                 f"?key={api_key}"
-                f"&q={keyword}"
+                f"&q={encoded_kw}"
                 f"&image_type=photo"
                 f"&orientation=horizontal"
-                f"&per_page=3"
+                f"&per_page=5"
                 f"&min_width=800"
                 f"&safesearch=true"
             )
@@ -1043,7 +1106,9 @@ class ProPPTXGenerator:
             if not hits:
                 return None
 
-            img_url = hits[0].get("webformatURL", "")
+            # Eng katta o'lchamli rasmni tanlash (largeImageURL > webformatURL)
+            hit = hits[0]
+            img_url = hit.get("largeImageURL") or hit.get("webformatURL", "")
             if not img_url:
                 return None
 
@@ -1052,13 +1117,46 @@ class ProPPTXGenerator:
                     return None
                 img_data = await resp.read()
 
+            if len(img_data) < 5000:
+                return None
+
             tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
             tmp.write(img_data)
             tmp.close()
+            logger.debug(f"Pixabay rasm: {keyword} -> {len(img_data)} bytes")
             return tmp.name
 
         except Exception as e:
             logger.debug(f"Pixabay xato ({keyword}): {e}")
+            return None
+
+    async def _download_picsum_image(self, session, keyword: str) -> Optional[str]:
+        """Lorem Picsum dan rasm yuklab olish (fallback — har doim ishlaydi)"""
+        try:
+            import urllib.parse
+            import random
+            encoded_kw = urllib.parse.quote(keyword)
+            img_id = random.randint(1, 1000)
+            img_url = f"https://picsum.photos/seed/{encoded_kw}{img_id}/1280/720"
+
+            async with session.get(img_url, allow_redirects=True) as resp:
+                if resp.status != 200:
+                    return None
+                content_type = resp.headers.get('content-type', '')
+                if 'image' not in content_type:
+                    return None
+                img_data = await resp.read()
+                if len(img_data) < 5000:
+                    return None
+
+            tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+            tmp.write(img_data)
+            tmp.close()
+            logger.debug(f"Picsum rasm: {keyword} -> {len(img_data)} bytes")
+            return tmp.name
+
+        except Exception as e:
+            logger.debug(f"Picsum xato ({keyword}): {e}")
             return None
 
 
