@@ -50,6 +50,27 @@ class PresentationWorker:
         except Exception as e:
             logger.warning(f"⚠️ PPTX Post-Processor init xato: {e}")
 
+        # ProPPTXGenerator — yangi professional generator
+        self.pro_pptx_generator = None
+        try:
+            from utils.pptx_generator import ProPPTXGenerator
+            self.pro_pptx_generator = ProPPTXGenerator
+            logger.info("✅ ProPPTXGenerator tayyor")
+        except ImportError as e:
+            logger.warning(f"⚠️ ProPPTXGenerator import xato: {e}")
+
+        # Pixabay API key (rasmlar uchun)
+        self.pixabay_api_key = None
+        try:
+            from environs import Env
+            env = Env()
+            env.read_env()
+            self.pixabay_api_key = env.str("PIXABAY_API_KEY", None)
+            if self.pixabay_api_key:
+                logger.info("✅ Pixabay API key topildi")
+        except Exception:
+            pass
+
     def _init_course_work_tools(self):
         """Course work toollarini ishga tushirish"""
         try:
@@ -367,7 +388,7 @@ Muvaffaqiyatlar! 🚀
             return False
 
     async def _process_presentation(self, task_data: dict):
-        """Prezentatsiya yaratish"""
+        """Prezentatsiya yaratish — ProPPTXGenerator (asosiy) + Presenton (fallback)"""
         task_uuid = task_data.get('task_uuid')
         task_type = task_data.get('type')
         user_id = task_data.get('user_id')
@@ -400,12 +421,17 @@ Muvaffaqiyatlar! 🚀
                 msg = await self.bot.send_message(
                     telegram_id,
                     f"🎨 <b>Prezentatsiya yaratilmoqda...</b>{theme_text}\n\n"
-                    f"⏳ Progress: 5%",
+                    f"⏳ <b>Jarayon:</b>\n"
+                    f"1️⃣ ⚙️ Kontent yaratilmoqda...\n"
+                    f"2️⃣ ⏸ Dizayn qilinmoqda\n"
+                    f"3️⃣ ⏸ Rasmlar qo'shilmoqda\n"
+                    f"4️⃣ ⏸ Tayyor!\n\n"
+                    f"📊 Progress: 5%",
                     parse_mode='HTML'
                 )
                 progress_message_id = msg.message_id
 
-            # Content yaratish
+            # 1. Content yaratish (GPT-4o)
             content = await self._generate_content(task_data)
             if not content:
                 raise Exception("Content yaratilmadi")
@@ -416,69 +442,123 @@ Muvaffaqiyatlar! 🚀
                 try:
                     await self.bot.edit_message_text(
                         f"🎨 <b>Prezentatsiya yaratilmoqda...</b>\n\n"
-                        f"✅ Kontent tayyor\n⚙️ Dizayn...\n\n"
+                        f"⏳ <b>Jarayon:</b>\n"
+                        f"1️⃣ ✅ Kontent tayyor\n"
+                        f"2️⃣ ⚙️ Dizayn qilinmoqda...\n"
+                        f"3️⃣ ⏸ Rasmlar qo'shilmoqda\n"
+                        f"4️⃣ ⏸ Tayyor!\n\n"
                         f"📊 Progress: 30%",
                         telegram_id, progress_message_id, parse_mode='HTML'
                     )
                 except:
                     pass
 
-            # Presenton API
-            slide_count = task_data.get('slide_count', 10)
-            formatted_text = self.presenton_api.format_content_for_gamma(content, task_type)
-
-            ai_result = await self.presenton_api.create_presentation_from_text(
-                text_content=formatted_text,
-                title=content.get('project_name') or content.get('title', 'Prezentatsiya'),
-                num_cards=slide_count,
-                text_mode="generate",
-                theme_id=theme_id
-            )
-
-            if not ai_result:
-                raise Exception("Presenton API xato")
-
-            generation_id = ai_result.get('generationId')
-            if not generation_id:
-                raise Exception("generationId topilmadi")
-
-            self.user_db.update_task_status(task_uuid, 'processing', progress=50)
-
-            # Kutish
-            is_ready = await self.presenton_api.wait_for_completion(
-                generation_id, timeout_seconds=600, check_interval=10, wait_for_pptx=True
-            )
-
-            if not is_ready:
-                raise Exception("Presenton API timeout")
-
-            self.user_db.update_task_status(task_uuid, 'processing', progress=80)
-
-            # PPTX yuklab olish
+            # 2. PPTX yaratish — ProPPTXGenerator (asosiy)
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f"presentation_{task_type}_{user_id}_{timestamp}.pptx"
             output_path = f"/tmp/{filename}"
+            pptx_created = False
 
-            download_success = await self.presenton_api.download_pptx(generation_id, output_path)
-
-            if not download_success or not os.path.exists(output_path):
-                raise Exception("PPTX yuklab olinmadi")
-
-            # PPTX Post-Processing — shrift, layout, overflow tuzatish
-            if self.pptx_post_processor:
+            if self.pro_pptx_generator:
                 try:
-                    logger.info(f"🔧 PPTX post-processing boshlandi: {output_path}")
-                    pp_success = self.pptx_post_processor(output_path)
-                    if pp_success:
-                        logger.info("✅ PPTX post-processing muvaffaqiyatli")
-                    else:
-                        logger.warning("⚠️ PPTX post-processing xato, original fayl ishlatiladi")
+                    logger.info(f"🎨 ProPPTXGenerator bilan PPTX yaratish (theme: {theme_id})")
+                    gen = self.pro_pptx_generator(theme_id=theme_id)
+
+                    self.user_db.update_task_status(task_uuid, 'processing', progress=50)
+
+                    if telegram_id and progress_message_id:
+                        try:
+                            await self.bot.edit_message_text(
+                                f"🎨 <b>Prezentatsiya yaratilmoqda...</b>\n\n"
+                                f"⏳ <b>Jarayon:</b>\n"
+                                f"1️⃣ ✅ Kontent tayyor\n"
+                                f"2️⃣ ✅ Dizayn tayyor\n"
+                                f"3️⃣ ⚙️ Rasmlar qo'shilmoqda...\n"
+                                f"4️⃣ ⏸ Tayyor!\n\n"
+                                f"📊 Progress: 50%",
+                                telegram_id, progress_message_id, parse_mode='HTML'
+                            )
+                        except:
+                            pass
+
+                    pptx_created = await gen.generate(
+                        content=content,
+                        output_path=output_path,
+                        pixabay_api_key=self.pixabay_api_key,
+                    )
+
+                    if pptx_created and os.path.exists(output_path):
+                        file_size = os.path.getsize(output_path)
+                        if file_size < 1000:
+                            logger.warning(f"⚠️ PPTX juda kichik ({file_size} bytes), fallback")
+                            pptx_created = False
+                        else:
+                            logger.info(f"✅ ProPPTXGenerator muvaffaqiyatli: {file_size} bytes")
+
                 except Exception as e:
-                    logger.warning(f"⚠️ PPTX post-processing exception: {e}")
+                    logger.error(f"⚠️ ProPPTXGenerator xato: {e}, Presenton'ga o'tish...")
+                    pptx_created = False
 
-            self.user_db.update_task_status(task_uuid, 'processing', progress=95, file_path=output_path)
+            # 3. Fallback — Presenton API (agar yangi generator ishlamasa)
+            if not pptx_created:
+                logger.info("🔄 Presenton API ga fallback...")
+                slide_count = task_data.get('slide_count', 10)
+                formatted_text = self.presenton_api.format_content_for_gamma(content, task_type)
 
-            # User'ga yuborish
+                ai_result = await self.presenton_api.create_presentation_from_text(
+                    text_content=formatted_text,
+                    title=content.get('project_name') or content.get('title', 'Prezentatsiya'),
+                    num_cards=slide_count,
+                    text_mode="generate",
+                    theme_id=theme_id
+                )
+
+                if not ai_result:
+                    raise Exception("Presenton API xato")
+
+                generation_id = ai_result.get('generationId')
+                if not generation_id:
+                    raise Exception("generationId topilmadi")
+
+                self.user_db.update_task_status(task_uuid, 'processing', progress=50)
+
+                is_ready = await self.presenton_api.wait_for_completion(
+                    generation_id, timeout_seconds=600, check_interval=10, wait_for_pptx=True
+                )
+
+                if not is_ready:
+                    raise Exception("Presenton API timeout")
+
+                download_success = await self.presenton_api.download_pptx(generation_id, output_path)
+
+                if not download_success or not os.path.exists(output_path):
+                    raise Exception("PPTX yuklab olinmadi")
+
+                # Eski post-processor (faqat Presenton fallback uchun)
+                if self.pptx_post_processor:
+                    try:
+                        self.pptx_post_processor(output_path)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Post-processing xato: {e}")
+
+            self.user_db.update_task_status(task_uuid, 'processing', progress=90, file_path=output_path)
+
+            if telegram_id and progress_message_id:
+                try:
+                    await self.bot.edit_message_text(
+                        f"🎨 <b>Prezentatsiya yaratilmoqda...</b>\n\n"
+                        f"⏳ <b>Jarayon:</b>\n"
+                        f"1️⃣ ✅ Kontent tayyor\n"
+                        f"2️⃣ ✅ Dizayn tayyor\n"
+                        f"3️⃣ ✅ Rasmlar qo'shildi\n"
+                        f"4️⃣ ⚙️ Yuborilmoqda...\n\n"
+                        f"📊 Progress: 90%",
+                        telegram_id, progress_message_id, parse_mode='HTML'
+                    )
+                except:
+                    pass
+
+            # 4. User'ga yuborish
             if telegram_id:
                 file_size = os.path.getsize(output_path)
                 logger.info(f"PPTX Telegram'ga yuborilmoqda: {output_path} ({file_size} bytes)")
@@ -499,6 +579,21 @@ Muvaffaqiyatlar! 🚀
                     raise
 
             self.user_db.update_task_status(task_uuid, 'completed', progress=100, file_path=output_path)
+
+            if telegram_id and progress_message_id:
+                try:
+                    await self.bot.edit_message_text(
+                        f"🎉 <b>Prezentatsiya tayyor!</b>\n\n"
+                        f"⏳ <b>Jarayon:</b>\n"
+                        f"1️⃣ ✅ Kontent tayyor\n"
+                        f"2️⃣ ✅ Dizayn tayyor\n"
+                        f"3️⃣ ✅ Rasmlar qo'shildi\n"
+                        f"4️⃣ ✅ Yuborildi!\n\n"
+                        f"📊 Progress: 100%",
+                        telegram_id, progress_message_id, parse_mode='HTML'
+                    )
+                except:
+                    pass
 
             try:
                 if os.path.exists(output_path):
