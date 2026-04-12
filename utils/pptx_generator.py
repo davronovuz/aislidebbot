@@ -823,11 +823,17 @@ class ProPPTXGenerator:
 
     def _set_gradient_bg(self, slide, color1, color2, angle=5400000):
         """Slide ga gradient background (XML orqali)"""
-        bg = slide.background._element
+        cSld = slide._element.find(qn('p:cSld'))
+        if cSld is None:
+            return
 
-        for child in list(bg):
-            bg.remove(child)
+        # Mavjud bg ni olib tashlash
+        old_bg = cSld.find(qn('p:bg'))
+        if old_bg is not None:
+            cSld.remove(old_bg)
 
+        # Yangi bg yaratish va spTree dan OLDIN qo'shish
+        bg = etree.Element(qn('p:bg'))
         bgPr = etree.SubElement(bg, qn('p:bgPr'))
         gradFill = etree.SubElement(bgPr, qn('a:gradFill'))
         gsLst = etree.SubElement(gradFill, qn('a:gsLst'))
@@ -850,19 +856,39 @@ class ProPPTXGenerator:
 
         etree.SubElement(bgPr, qn('a:effectLst'))
 
+        # bg ni spTree dan oldin qo'shish
+        spTree = cSld.find(qn('p:spTree'))
+        if spTree is not None:
+            cSld.insert(list(cSld).index(spTree), bg)
+        else:
+            cSld.insert(0, bg)
+
     def _set_solid_bg(self, slide, color):
         """Slide ga solid background"""
-        bg = slide.background._element
+        cSld = slide._element.find(qn('p:cSld'))
+        if cSld is None:
+            return
 
-        for child in list(bg):
-            bg.remove(child)
+        # Mavjud bg ni olib tashlash
+        old_bg = cSld.find(qn('p:bg'))
+        if old_bg is not None:
+            cSld.remove(old_bg)
 
+        # Yangi bg yaratish
+        bg = etree.Element(qn('p:bg'))
         bgPr = etree.SubElement(bg, qn('p:bgPr'))
         solidFill = etree.SubElement(bgPr, qn('a:solidFill'))
         srgb = etree.SubElement(solidFill, qn('a:srgbClr'))
         srgb.set('val', '%02X%02X%02X' % color)
 
         etree.SubElement(bgPr, qn('a:effectLst'))
+
+        # bg ni spTree dan oldin qo'shish
+        spTree = cSld.find(qn('p:spTree'))
+        if spTree is not None:
+            cSld.insert(list(cSld).index(spTree), bg)
+        else:
+            cSld.insert(0, bg)
 
     # ======================== XML EFFECTS ========================
 
