@@ -73,6 +73,18 @@ class CourseWorkGenerator:
             # =============================================
             # STEP 3: Generate each chapter section
             # =============================================
+            # Min so'z — ish turiga qarab
+            section_min_words = {
+                'diplom_ishi': 1500,
+                'kurs_ishi': 1200,
+                'ilmiy_maqola': 800,
+                'referat': 900,
+                'mustaqil_ish': 800,
+                'laboratoriya_ishi': 600,
+                'amaliy_ish': 700,
+                'hisobot': 700,
+            }.get(work_type, 1000)
+
             chapters = []
             for ch_idx, chapter_info in enumerate(outline.get('chapters', [])):
                 chapter_title = chapter_info.get('title', f'{ch_idx + 1}-bob')
@@ -93,7 +105,7 @@ class CourseWorkGenerator:
                         section_type="chapter_section",
                         language=language,
                         lang_instructions=lang_instructions,
-                        min_words=1000,
+                        min_words=section_min_words,
                         chapter_title=chapter_title,
                         section_number=sec_number
                     )
@@ -310,6 +322,9 @@ MUHIM:
             prompt = f"Yozing: {section_title} - {topic} haqida. Kamida {min_words} so'z."
 
         try:
+            # Diplom ishi uchun ko'proq token
+            max_tok = 6000 if min_words >= 1200 else 4096
+
             response = await self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
@@ -334,7 +349,7 @@ MUHIM QOIDALAR:
                     },
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=4096,
+                max_tokens=max_tok,
                 temperature=0.7
             )
 
@@ -647,14 +662,51 @@ Paragraflarni bo'sh qator bilan ajrating."""
 
     def _extract_recommendations(self, conclusion_text: str, topic: str) -> List[str]:
         """Xulosa matnidan tavsiyalarni ajratib olish"""
-        recommendations = [
-            f"{topic} sohasida me'yoriy-huquqiy bazani takomillashtirish va zamonaviy talablarga moslashtirish",
-            "Kadrlar tayyorlash tizimini yanada rivojlantirish va xalqaro tajriba almashuvini kengaytirish",
-            "Zamonaviy texnologiyalarni joriy etish va innovatsion yechimlarni qo'llash",
-            "Monitoring va baholash tizimini yaratish hamda samaradorlikni muntazam tahlil qilish",
-            "Xalqaro hamkorlikni kengaytirish va ilg'or tajribalarni o'rganish"
-        ]
-        return recommendations
+        import re
+
+        recommendations = []
+
+        if conclusion_text:
+            # Raqamlangan tavsiyalarni topish: 1. ... 2. ... 3. ...
+            numbered = re.findall(r'\d+[.)]\s*(.+?)(?=\d+[.)]|\n\n|$)', conclusion_text, re.DOTALL)
+            for item in numbered:
+                clean = item.strip().rstrip(';., ')
+                # Faqat tavsiya/xulosa xarakteridagi jumlalarni olish (40+ belgi)
+                if len(clean) > 40 and any(kw in clean.lower() for kw in [
+                    'kerak', 'lozim', 'zarur', 'tavsiya', 'takomil', 'rivojlan',
+                    'joriy', 'kengaytir', 'yaratish', 'oshirish', 'mustahkam',
+                    'необходимо', 'рекомендуется', 'следует', 'важно',
+                    'should', 'recommend', 'need', 'important', 'develop'
+                ]):
+                    recommendations.append(clean)
+
+            # Agar 3 tadan kam topilsa, jumlalardan qidirish
+            if len(recommendations) < 3:
+                sentences = re.split(r'[.!]\s+', conclusion_text)
+                for sent in sentences:
+                    sent = sent.strip()
+                    if len(sent) > 50 and any(kw in sent.lower() for kw in [
+                        'tavsiya', 'takomil', 'rivojlan', 'joriy etish',
+                        'kengaytir', 'zarur', 'lozim', 'kerak',
+                        'рекомендуется', 'необходимо', 'следует',
+                        'recommend', 'should', 'necessary'
+                    ]):
+                        if sent not in recommendations:
+                            recommendations.append(sent)
+                    if len(recommendations) >= 7:
+                        break
+
+        # Agar hech narsa topilmasa — fallback
+        if len(recommendations) < 3:
+            recommendations = [
+                f"{topic} sohasida me'yoriy-huquqiy bazani takomillashtirish va zamonaviy talablarga moslashtirish",
+                "Kadrlar tayyorlash tizimini yanada rivojlantirish va xalqaro tajriba almashuvini kengaytirish",
+                "Zamonaviy texnologiyalarni joriy etish va innovatsion yechimlarni qo'llash",
+                "Monitoring va baholash tizimini yaratish hamda samaradorlikni muntazam tahlil qilish",
+                "Xalqaro hamkorlikni kengaytirish va ilg'or tajribalarni o'rganish"
+            ]
+
+        return recommendations[:7]
 
     def _get_fallback_outline(self, topic: str, subject: str, structure: Dict) -> Dict:
         """Fallback outline - agar AI outline yarata olmasa"""
@@ -904,6 +956,103 @@ XULOSA VA TAVSIYALAR ({max(200, total_words // 10)} so'z):
 - Keyingi davr uchun tavsiyalar
 
 ILOVALAR: Jadvallar, grafiklar
+"""
+            },
+            'diplom_ishi': {
+                'name': "Bitiruv malakaviy ishi",
+                'intro_words': max(1000, total_words // 5),
+                'chapter_words': max(2500, total_words // 3),
+                'conclusion_words': max(800, total_words // 7),
+                'min_references': 25,
+                'chapters_outline': ['Nazariy-metodologik asoslar', 'Amaliy tadqiqot va tahlil', 'Takomillashtirish yo\'llari va tavsiyalar'],
+                'detailed_outline': f"""
+KIRISH ({max(1000, total_words // 5)} so'z):
+- Mavzuning dolzarbligi va ahamiyati
+- Muammoning qo'yilishi
+- Tadqiqotning maqsadi va vazifalari (7-10 ta)
+- Tadqiqot ob'ekti va predmeti
+- Tadqiqot metodlari va usullari
+- Ishning ilmiy yangiligi
+- Ishning amaliy ahamiyati
+- Ishning tuzilishi haqida
+
+I BOB. NAZARIY-METODOLOGIK ASOSLAR ({max(2500, total_words // 3)} so'z):
+1.1. Asosiy tushunchalar, ta'riflar va kategoriyalar (800+ so'z)
+1.2. Nazariy yondashuvlar va ilmiy maktablar tahlili (800+ so'z)
+1.3. Xorijiy va mahalliy tajriba qiyosiy tahlili (800+ so'z)
+
+II BOB. AMALIY TADQIQOT VA TAHLIL ({max(2500, total_words // 3)} so'z):
+2.1. O'zbekistonda hozirgi holat tahlili (800+ so'z)
+2.2. Muammolar diagnostikasi va sabablari (800+ so'z)
+2.3. Case study va empirik tadqiqot natijalari (800+ so'z)
+
+III BOB. TAKOMILLASHTIRISH YO'LLARI VA TAVSIYALAR ({max(2000, total_words // 4)} so'z):
+3.1. Takomillashtirish strategiyasi va mexanizmlari (700+ so'z)
+3.2. Amaliy tavsiyalar va joriy etish rejasi (700+ so'z)
+3.3. Kutilayotgan natijalar va istiqbollar (600+ so'z)
+
+XULOSA ({max(800, total_words // 7)} so'z):
+- Har bir vazifa bo'yicha batafsil xulosa
+- Umumiy natijalar va tavsiyalar
+- Kelgusi tadqiqotlar yo'nalishlari
+
+ADABIYOTLAR: Kamida 25 ta manba
+ILOVALAR: Jadvallar, grafiklar, sxemalar
+"""
+            },
+            'laboratoriya_ishi': {
+                'name': "Laboratoriya ishi",
+                'intro_words': max(200, total_words // 10),
+                'chapter_words': max(500, total_words // 3),
+                'conclusion_words': max(200, total_words // 10),
+                'min_references': 4,
+                'chapters_outline': ['Nazariy qism', 'Amaliy qism va natijalar'],
+                'detailed_outline': f"""
+KIRISH ({max(200, total_words // 10)} so'z):
+- Laboratoriya ishining maqsadi
+- Vazifalar
+- Kerakli jihozlar/dasturlar
+
+I QISM. NAZARIY MA'LUMOTLAR ({max(500, total_words // 3)} so'z):
+1.1. Asosiy nazariy ma'lumotlar (300+ so'z)
+1.2. Formulalar va metodlar (200+ so'z)
+
+II QISM. AMALIY BAJARILISHI ({max(500, total_words // 3)} so'z):
+2.1. Bajarilgan ishlar tartibi (300+ so'z)
+2.2. Natijalar va hisob-kitoblar (200+ so'z)
+
+XULOSA ({max(200, total_words // 10)} so'z):
+- Olingan natijalar
+- Xulosalar
+
+ADABIYOTLAR: Kamida 4 ta manba
+"""
+            },
+            'amaliy_ish': {
+                'name': "Amaliy ish",
+                'intro_words': max(250, total_words // 8),
+                'chapter_words': max(600, total_words // 3),
+                'conclusion_words': max(200, total_words // 10),
+                'min_references': 5,
+                'chapters_outline': ['Nazariy asoslar', 'Amaliy bajarilishi'],
+                'detailed_outline': f"""
+KIRISH ({max(250, total_words // 8)} so'z):
+- Ishning maqsadi va vazifalari
+- Kerakli vositalar
+
+I QISM. NAZARIY ASOSLAR ({max(600, total_words // 3)} so'z):
+1.1. Asosiy tushunchalar (300+ so'z)
+1.2. Metodlar va usullar (300+ so'z)
+
+II QISM. AMALIY BAJARILISHI ({max(600, total_words // 3)} so'z):
+2.1. Ish tartibi va jarayoni (300+ so'z)
+2.2. Natijalar tahlili (300+ so'z)
+
+XULOSA ({max(200, total_words // 10)} so'z):
+- Asosiy natijalar
+- Amaliy xulosalar
+
+ADABIYOTLAR: Kamida 5 ta manba
 """
             }
         }

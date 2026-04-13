@@ -34,11 +34,13 @@ WORK_TYPE_LABELS = {
     'mustaqil_ish': 'MUSTAQIL ISH',
     'referat': 'REFERAT',
     'kurs_ishi': 'KURS ISHI',
+    'diplom_ishi': 'BITIRUV MALAKAVIY ISHI',
     'bitiruv_malakaviy_ishi': 'BITIRUV MALAKAVIY ISHI',
     'magistr_dissertatsiyasi': 'MAGISTR DISSERTATSIYASI',
     'laboratoriya_ishi': 'LABORATORIYA ISHI',
     'amaliy_ish': 'AMALIY ISH',
     'hisobot': 'HISOBOT',
+    'ilmiy_maqola': 'ILMIY MAQOLA',
 }
 
 
