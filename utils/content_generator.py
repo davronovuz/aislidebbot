@@ -88,71 +88,102 @@ class ContentGenerator:
 
         lang_map = {
             "uz": "O'zbek tilida",
-            "ru": "Русский язык (на русском языке)",
-            "en": "English (in English language)"
+            "ru": "На русском языке",
+            "en": "In English"
         }
         lang_instruction = lang_map.get(language, "O'zbek tilida")
 
-        prompt = f"""Siz tajribali prezentatsiya mutaxassisisiz. Professional, batafsil va mazmunli prezentatsiya kontent yarating.
+        # Til bo'yicha system prompt
+        system_prompts = {
+            "uz": "Siz professional prezentatsiya mutaxassisisiz. BATAFSIL, MAZMUNLI va INFORMATIV kontent yarating. Har bir slayd to'liq ma'lumotga ega bo'lsin — kam matn yozish MUMKIN EMAS. O'zbek tilida professional uslubda yozing. image_keywords INGLIZ tilida. Har bir bullet_point 1-2 jumla bo'lsin, oddiy ro'yxat emas.",
+            "ru": "Вы профессиональный эксперт по презентациям. Создайте ПОДРОБНЫЙ, СОДЕРЖАТЕЛЬНЫЙ и ИНФОРМАТИВНЫЙ контент. Каждый слайд должен быть полноценным — писать мало текста НЕЛЬЗЯ. Пишите на русском языке профессиональным стилем. image_keywords на АНГЛИЙСКОМ языке. Каждый bullet_point — 1-2 предложения, не просто список.",
+            "en": "You are a professional presentation expert. Create DETAILED, MEANINGFUL and INFORMATIVE content. Each slide must have full content — writing too little is NOT allowed. Write in English in a professional style. image_keywords in ENGLISH. Each bullet_point should be 1-2 sentences, not just a simple list."
+        }
+        system_prompt = system_prompts.get(language, system_prompts["uz"])
 
-MAVZU: {topic}
-QO'SHIMCHA MA'LUMOT: {details or "Yo'q"}
-SLAYDLAR SONI: {slide_count}
-TIL: {lang_instruction} — barcha matn (title, subtitle, content, bullet_points) shu tilda yozilsin!
-
-KONTENT QOIDALARI:
+        # Til bo'yicha prompt qoidalari
+        rules_map = {
+            "uz": """KONTENT QOIDALARI:
 1. Har bir slayd sarlavhasi aniq va tushunarli bo'lsin (4-8 so'z)
-2. Har bir slayd uchun "content" maydoni — 3-5 ta to'liq jumla yozing. Bu slaydning asosiy matni. Har bir jumla ma'noli va informativ bo'lsin. Mavzuni chuqur yoritib bering.
-3. Har bir slaydda 5-7 ta bullet_points bo'lsin. Har bir bullet — 1-2 jumla, batafsil va foydali ma'lumot. Oddiy ro'yxat emas, balki har biri mustaqil fikr bo'lsin.
-4. Slaydlar orasida mantiqiy bog'lanish bo'lsin — bir slayd ikkinchisiga olib borsin.
+2. Har bir slayd uchun "content" maydoni — 3-5 ta to'liq jumla yozing. Batafsil, informativ matn.
+3. Har bir slaydda 5-7 ta bullet_points bo'lsin. Har bir bullet — 1-2 jumla, batafsil va foydali ma'lumot.
+4. Slaydlar orasida mantiqiy bog'lanish bo'lsin.
 5. Kirish slaydida mavzuning dolzarbligi va maqsadi yozilsin.
 6. Xulosa slaydida asosiy xulosalar va takliflar bo'lsin.
-7. O'rtadagi slaydlarda mavzuning turli jihatlarini batafsil yoritib bering.
+7. O'rtadagi slaydlarda mavzuning turli jihatlarini batafsil yoritib bering.""",
+            "ru": """ПРАВИЛА КОНТЕНТА:
+1. Заголовок каждого слайда — чёткий и понятный (4-8 слов)
+2. Поле "content" — 3-5 полных предложений. Подробный, информативный текст.
+3. В каждом слайде 5-7 bullet_points. Каждый — 1-2 предложения с полезной информацией.
+4. Между слайдами должна быть логическая связь.
+5. Вводный слайд — актуальность темы и цель.
+6. Заключительный слайд — основные выводы и рекомендации.
+7. В остальных слайдах раскройте разные аспекты темы.""",
+            "en": """CONTENT RULES:
+1. Each slide title should be clear and concise (4-8 words)
+2. "content" field — 3-5 full sentences. Detailed, informative text.
+3. Each slide should have 5-7 bullet_points. Each bullet — 1-2 sentences with useful information.
+4. Slides should have logical flow between them.
+5. Introduction slide — relevance of the topic and purpose.
+6. Conclusion slide — key takeaways and recommendations.
+7. Middle slides should cover different aspects of the topic in detail."""
+        }
+        rules = rules_map.get(language, rules_map["uz"])
 
-RASM KALIT SO'ZLARI (INGLIZ TILIDA):
-- Har bir slaydga 3 ta kalit so'z: primary, secondary, fallback
-- primary: ANIQ, FOTOGRAFIYA QILINADIGAN narsa (2-3 so'z). Masalan: "students classroom desks", "doctor examining patient", "solar panels rooftop"
-- secondary: Kengroq tushuncha (2 so'z). Masalan: "education learning", "medical clinic"
-- fallback: Bitta oddiy so'z: "school", "hospital", "energy"
-- ABSTRAKT so'zlar ISHLATMANG: "innovation", "synergy", "strategy", "paradigm"
-- Test: "Fotograf buni suratga ola oladimi?" Agar yo'q — almashtiring
+        prompt = f"""You are an expert presentation creator. Create professional, detailed presentation content.
 
-JSON formatida qaytaring:
+TOPIC: {topic}
+ADDITIONAL INFO: {details or "None"}
+NUMBER OF SLIDES: {slide_count}
+
+CRITICAL LANGUAGE REQUIREMENT: ALL text content (title, subtitle, content, bullet_points) MUST be written {lang_instruction}. This is mandatory — do NOT use any other language for the content.
+
+{rules}
+
+IMAGE KEYWORDS (ALWAYS IN ENGLISH):
+- 3 keywords per slide: primary, secondary, fallback
+- primary: CONCRETE, PHOTOGRAPHABLE thing (2-3 words). Example: "students classroom desks", "doctor examining patient"
+- secondary: Broader concept (2 words). Example: "education learning"
+- fallback: Single simple word: "school", "hospital", "energy"
+- DO NOT use abstract words: "innovation", "synergy", "strategy", "paradigm"
+
+Return JSON:
 {{
-  "title": "Prezentatsiya sarlavhasi (ta'sirli, 5-10 so'z)",
-  "subtitle": "Mavzuning qisqa tavsifi (1-2 jumla)",
+  "title": "Presentation title (impactful, 5-10 words) — {lang_instruction}",
+  "subtitle": "Short description (1-2 sentences) — {lang_instruction}",
   "slides": [
     {{
       "slide_number": 1,
-      "title": "Slayd sarlavhasi (4-8 so'z)",
-      "content": "3-5 ta to'liq jumla. Batafsil, informativ matn. Mavzuni chuqur yoritib bering.",
+      "title": "Slide title (4-8 words) — {lang_instruction}",
+      "content": "3-5 full sentences — {lang_instruction}",
       "bullet_points": [
-        "Birinchi nuqta — 1-2 jumla bilan batafsil tushuntiring",
-        "Ikkinchi nuqta — aniq ma'lumot yoki fakt keltiring",
-        "Uchinchi nuqta — amaliy misol yoki dalil",
-        "To'rtinchi nuqta — qo'shimcha ma'lumot",
-        "Beshinchi nuqta — muhim jihat"
+        "First point — 1-2 sentences — {lang_instruction}",
+        "Second point — specific data or fact",
+        "Third point — practical example",
+        "Fourth point — additional info",
+        "Fifth point — important aspect"
       ],
       "image_keywords": {{
-        "primary": "aniq fotografiya qilinadigan sahna",
-        "secondary": "kengroq vizual tushuncha",
-        "fallback": "oddiy so'z"
+        "primary": "concrete photographable scene IN ENGLISH",
+        "secondary": "broader visual concept IN ENGLISH",
+        "fallback": "simple word IN ENGLISH"
       }}
     }}
   ]
 }}
 
-{slide_count} ta slayd yarating. Birinchi — kirish, oxirgi — xulosa. HAR BIR SLAYD BATAFSIL BO'LSIN!"""
+Create {slide_count} slides. First — introduction, last — conclusion. EVERY SLIDE MUST BE DETAILED!
+REMEMBER: All text MUST be {lang_instruction}. Only image_keywords in English."""
 
         try:
-            logger.info(f"OpenAI: Prezentatsiya content yaratish (model: {model})")
+            logger.info(f"OpenAI: Prezentatsiya content yaratish (model: {model}, lang: {language})")
 
             response = await self.client.chat.completions.create(
                 model=model,
                 messages=[
                     {
                         "role": "system",
-                        "content": "Siz professional prezentatsiya mutaxassisisiz. BATAFSIL, MAZMUNLI va INFORMATIV kontent yarating. Har bir slayd to'liq ma'lumotga ega bo'lsin — kam matn yozish MUMKIN EMAS. O'zbek tilida professional uslubda yozing. image_keywords INGLIZ tilida. Har bir bullet_point 1-2 jumla bo'lsin, oddiy ro'yxat emas."
+                        "content": system_prompt
                     },
                     {
                         "role": "user",

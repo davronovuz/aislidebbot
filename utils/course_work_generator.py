@@ -267,7 +267,11 @@ MUHIM:
                 messages=[
                     {
                         "role": "system",
-                        "content": f"Siz tajribali akademik professor. {lang_instructions}"
+                        "content": {
+                            'uz': f"Siz tajribali akademik professor. Barcha matnni O'ZBEK TILIDA yozing (lotin alifbosida).",
+                            'ru': f"Вы опытный академический профессор. Пишите ВСЕ тексты ТОЛЬКО на РУССКОМ ЯЗЫКЕ.",
+                            'en': f"You are an experienced academic professor. Write ALL text ONLY in ENGLISH."
+                        }.get(language, f"Siz tajribali akademik professor. {lang_instructions}")
                     },
                     {"role": "user", "content": prompt}
                 ],
@@ -325,13 +329,10 @@ MUHIM:
             # Diplom ishi uchun ko'proq token
             max_tok = 6000 if min_words >= 1200 else 4096
 
-            response = await self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": f"""Siz O'zbekistondagi ENG TAJRIBALI professor va akademik yozuvchisiz.
-{lang_instructions}
+            # Til bo'yicha system prompt
+            system_prompts = {
+                'uz': f"""Siz O'zbekistondagi ENG TAJRIBALI professor va akademik yozuvchisiz.
+O'ZBEK TILIDA yozing — lotin alifbosida!
 
 MUHIM QOIDALAR:
 1. FAQAT matn yozing - JSON, markdown, sarlavha, format belgilari ISHLATMANG
@@ -342,10 +343,51 @@ MUHIM QOIDALAR:
 6. Ilmiy akademik uslubda yozing
 7. Haqiqiy faktlar, statistika, misollar keltiring
 8. {subject} sohasidagi eng so'nggi ma'lumotlarni yozing
-9. Har 2-3 paragrafda MANBA iqtibosi keltiring (masalan: "Professor X.Y.ning ta'kidlashicha...", "Tadqiqotlar shuni ko'rsatadiki...")
+9. Har 2-3 paragrafda MANBA iqtibosi keltiring
 10. Raqamli ma'lumotlar (foizlar, yillar, statistika) MAJBURIY ishlatilsin
 11. O'zbekiston kontekstida misollar keltiring
-12. Paragraflar bir-biri bilan MANTIQIY bog'langan bo'lsin — oldingi paragrafdan keyingisiga o'tish tabiiy bo'lsin"""
+12. Paragraflar bir-biri bilan MANTIQIY bog'langan bo'lsin""",
+                'ru': f"""Вы САМЫЙ ОПЫТНЫЙ профессор и академический писатель.
+Пишите ТОЛЬКО на РУССКОМ ЯЗЫКЕ!
+
+ВАЖНЫЕ ПРАВИЛА:
+1. Пишите ТОЛЬКО текст — без JSON, markdown, заголовков, символов форматирования
+2. Пишите текст абзацами
+3. Каждый абзац должен содержать 6-10 предложений
+4. Между абзацами ставьте пустую строку
+5. Минимум {min_words} слов — НЕ СОКРАЩАЙТЕ!
+6. Пишите в научном академическом стиле
+7. Приводите реальные факты, статистику, примеры
+8. Используйте актуальные данные в области {subject}
+9. Каждые 2-3 абзаца цитируйте источники
+10. ОБЯЗАТЕЛЬНО используйте числовые данные (проценты, годы, статистику)
+11. Приводите примеры в контексте Узбекистана и международном контексте
+12. Абзацы должны быть ЛОГИЧЕСКИ связаны между собой""",
+                'en': f"""You are the MOST EXPERIENCED professor and academic writer.
+Write ONLY in ENGLISH!
+
+IMPORTANT RULES:
+1. Write ONLY plain text — no JSON, markdown, headers, or formatting symbols
+2. Write in paragraphs
+3. Each paragraph should contain 6-10 sentences
+4. Put empty lines between paragraphs
+5. Minimum {min_words} words — DO NOT shorten!
+6. Write in scientific academic style
+7. Provide real facts, statistics, examples
+8. Use the latest data in the field of {subject}
+9. Cite sources every 2-3 paragraphs
+10. MANDATORY use of numerical data (percentages, years, statistics)
+11. Provide examples in Uzbekistan and international context
+12. Paragraphs must be LOGICALLY connected to each other"""
+            }
+            system_content = system_prompts.get(language, system_prompts['uz'])
+
+            response = await self.client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system_content
                     },
                     {"role": "user", "content": prompt}
                 ],
@@ -374,9 +416,8 @@ MUHIM QOIDALAR:
         """
         Step 5: AI bilan adabiyotlar ro'yxatini yaratish
         """
-        prompt = f"""{lang_instructions}
-
-"{topic}" mavzusi va "{subject}" fani uchun GOST standartidagi adabiyotlar ro'yxatini yarating.
+        ref_prompts = {
+            'uz': f""""{topic}" mavzusi va "{subject}" fani uchun GOST standartidagi adabiyotlar ro'yxatini yarating.
 
 Kamida {min_count} ta manba bo'lsin:
 - O'zbek tilidagi kitoblar (5-6 ta) - haqiqiy yoki realistik mualliflar
@@ -385,12 +426,38 @@ Kamida {min_count} ta manba bo'lsin:
 - Qonunchilik manbalari (1-2 ta)
 - Internet manbalari (2-3 ta ishonchli sayt)
 
-Format: Har bir manbani raqam bilan boshlang.
-GOST 7.1-2003 standartiga mos formatda yozing.
+Format: GOST 7.1-2003. Har bir manbani raqam bilan yangi qatordan boshlang.
+FAQAT ro'yxatni yozing, ortiqcha matn kerak emas.""",
+            'ru': f"""Создайте список литературы по стандарту ГОСТ для темы "{topic}" по предмету "{subject}".
 
-FAQAT ro'yxatni yozing, ortiqcha matn kerak emas.
-Har bir manbani yangi qatordan boshlang.
-"""
+Минимум {min_count} источников:
+- Книги на русском языке (5-6 шт) — реалистичные авторы
+- Книги на узбекском языке (2-3 шт)
+- Книги и статьи на английском языке (3-4 шт)
+- Нормативно-правовые источники (1-2 шт)
+- Интернет-источники (2-3 надёжных сайта)
+
+Формат: ГОСТ 7.1-2003. Каждый источник с новой строки, пронумерован.
+Пишите ТОЛЬКО список, без лишнего текста.""",
+            'en': f"""Create a bibliography in GOST format for the topic "{topic}" in the field of "{subject}".
+
+At least {min_count} sources:
+- Books in English (5-6) — realistic authors
+- Books in Russian (2-3)
+- Books and articles in Uzbek (2-3)
+- Legal/regulatory sources (1-2)
+- Internet sources (2-3 reliable sites)
+
+Format: GOST 7.1-2003. Each source on a new line, numbered.
+Write ONLY the list, no extra text."""
+        }
+        prompt = ref_prompts.get(language, ref_prompts['uz'])
+
+        ref_system = {
+            'uz': "Siz kutubxonachi va bibliograf. GOST standartida adabiyotlar ro'yxatini yarating.",
+            'ru': "Вы библиотекарь и библиограф. Создайте список литературы по стандарту ГОСТ.",
+            'en': "You are a librarian and bibliographer. Create a bibliography in GOST standard format."
+        }
 
         try:
             response = await self.client.chat.completions.create(
@@ -398,7 +465,7 @@ Har bir manbani yangi qatordan boshlang.
                 messages=[
                     {
                         "role": "system",
-                        "content": f"Siz kutubxonachi va bibliograf. {lang_instructions}"
+                        "content": ref_system.get(language, ref_system['uz'])
                     },
                     {"role": "user", "content": prompt}
                 ],
@@ -442,137 +509,140 @@ Har bir manbani yangi qatordan boshlang.
             self, topic: str, subject: str, outline_summary: str,
             lang_instructions: str, min_words: int
     ) -> str:
-        return f"""Quyidagi mavzu bo'yicha akademik ishning KIRISH qismini yozing.
+        return f"""{lang_instructions}
 
-Mavzu: {topic}
-Fan: {subject}
+Write the INTRODUCTION section of an academic work on the following topic.
 
-Ishning strukturasi:
+Topic: {topic}
+Subject: {subject}
+
+Work structure:
 {outline_summary}
 
-KIRISH quyidagi qismlarni O'Z ICHIGA OLISHI SHART:
+The INTRODUCTION MUST include the following parts:
 
-1. MAVZUNING DOLZARBLIGI (2-3 paragraf):
-   - Nima uchun bu mavzu bugungi kunda muhim?
-   - Qanday ijtimoiy/iqtisodiy/ilmiy ahamiyatga ega?
-   - O'zbekistonda va jahonda bu masalaning holati
-   - Statistik ma'lumotlar bilan asoslang
+1. RELEVANCE OF THE TOPIC (2-3 paragraphs):
+   - Why is this topic important today?
+   - What social/economic/scientific significance does it have?
+   - State of this issue in Uzbekistan and globally
+   - Support with statistical data
 
-2. MUAMMONING QO'YILISHI (1-2 paragraf):
-   - Qanday muammolar mavjud?
-   - Nima uchun bu muammolarni o'rganish kerak?
-   - Oldingi tadqiqotlarda qanday bo'shliqlar bor?
+2. PROBLEM STATEMENT (1-2 paragraphs):
+   - What problems exist?
+   - Why is it necessary to study these problems?
+   - What gaps exist in previous research?
 
-3. ISHNING MAQSADI (1 paragraf):
-   - Aniq va ravshan maqsad
+3. PURPOSE OF THE WORK (1 paragraph):
+   - Clear and specific purpose
 
-4. ISHNING VAZIFALARI (raqamlangan ro'yxat, 5-7 ta):
-   - Har bir vazifa aniq va o'lchanadigan bo'lsin
-   - 1. ...
-   - 2. ...
-   - va hokazo
+4. TASKS OF THE WORK (numbered list, 5-7 items):
+   - Each task should be specific and measurable
 
-5. TADQIQOT OB'EKTI VA PREDMETI (1 paragraf):
-   - Ob'ekt - nima o'rganilmoqda
-   - Predmet - qaysi jihati o'rganilmoqda
+5. OBJECT AND SUBJECT OF RESEARCH (1 paragraph):
+   - Object - what is being studied
+   - Subject - which aspect is being studied
 
-6. TADQIQOT METODLARI (1 paragraf):
-   - Qanday ilmiy usullar qo'llanilgan (tahlil, sintez, qiyoslash, statistik, ekspert bahosi, kuzatish va h.k.)
+6. RESEARCH METHODS (1 paragraph):
+   - What scientific methods are used (analysis, synthesis, comparison, statistical, expert assessment, etc.)
 
-7. ISHNING ILMIY YANGILIGI VA AMALIY AHAMIYATI (1-2 paragraf):
-   - Nima yangilik bor?
-   - Amaliyotda kimga foydali?
+7. SCIENTIFIC NOVELTY AND PRACTICAL SIGNIFICANCE (1-2 paragraphs):
+   - What is new?
+   - Who benefits in practice?
 
-8. ISHNING TUZILISHI (1 paragraf):
-   - Ish necha bob, necha bo'limdan iborat ekanligi
+8. STRUCTURE OF THE WORK (1 paragraph):
+   - How many chapters and sections the work contains
 
-JAMI KAMIDA {min_words} SO'Z YOZING!
-To'g'ridan-to'g'ri matn yozing, hech qanday sarlavha yoki format belgisi ishlatmang.
-Paragraflarni bo'sh qator bilan ajrating."""
+WRITE AT LEAST {min_words} WORDS!
+Write plain text only, no headers or formatting symbols.
+Separate paragraphs with empty lines."""
 
     def _build_conclusion_prompt(
             self, topic: str, subject: str, outline_summary: str,
             lang_instructions: str, min_words: int
     ) -> str:
-        return f"""Quyidagi mavzu bo'yicha akademik ishning XULOSA qismini yozing.
+        return f"""{lang_instructions}
 
-Mavzu: {topic}
-Fan: {subject}
+Write the CONCLUSION section of an academic work on the following topic.
 
-Ishning strukturasi:
+Topic: {topic}
+Subject: {subject}
+
+Work structure:
 {outline_summary}
 
-XULOSA quyidagi qismlarni O'Z ICHIGA OLISHI SHART:
+The CONCLUSION MUST include the following parts:
 
-1. UMUMIY XULOSA (1-2 paragraf):
-   - Ish davomida nima qilindi?
-   - Qanday natijalar olindi?
+1. GENERAL CONCLUSION (1-2 paragraphs):
+   - What was done during the work?
+   - What results were obtained?
 
-2. HAR BIR VAZIFA BO'YICHA XULOSA (3-5 paragraf):
-   - Birinchi vazifa bo'yicha: nima aniqlandi...
-   - Ikkinchi vazifa bo'yicha: nima tahlil qilindi...
-   - Uchinchi vazifa bo'yicha: nima ishlab chiqildi...
-   - va hokazo
+2. CONCLUSION FOR EACH TASK (3-5 paragraphs):
+   - First task: what was discovered...
+   - Second task: what was analyzed...
+   - Third task: what was developed...
+   - etc.
 
-3. ASOSIY TOPILMALAR (1-2 paragraf):
-   - Eng muhim natijalar nima?
-   - Qanday yangi bilimlar olindi?
+3. KEY FINDINGS (1-2 paragraphs):
+   - What are the most important results?
+   - What new knowledge was gained?
 
-4. AMALIY TAVSIYALAR (raqamlangan, 5-7 ta):
-   - Aniq va amalga oshirish mumkin bo'lgan tavsiyalar
-   - Har bir tavsiya 2-3 gap bilan tushuntirilsin
+4. PRACTICAL RECOMMENDATIONS (numbered, 5-7 items):
+   - Specific and implementable recommendations
+   - Each recommendation explained in 2-3 sentences
 
-5. KELGUSIDAGI TADQIQOTLAR UCHUN YO'NALISHLAR (1-2 paragraf):
-   - Bu mavzuni yanada chuqurroq o'rganish uchun nima qilish kerak?
-   - Qaysi yo'nalishlarda tadqiqot olib borish mumkin?
+5. DIRECTIONS FOR FUTURE RESEARCH (1-2 paragraphs):
+   - What needs to be done to study this topic further?
+   - In which directions can research be conducted?
 
-JAMI KAMIDA {min_words} SO'Z YOZING!
-To'g'ridan-to'g'ri matn yozing, hech qanday sarlavha yoki format belgisi ishlatmang.
-Paragraflarni bo'sh qator bilan ajrating."""
+WRITE AT LEAST {min_words} WORDS!
+Write plain text only, no headers or formatting symbols.
+Separate paragraphs with empty lines."""
 
     def _build_chapter_section_prompt(
             self, topic: str, subject: str, section_title: str,
             chapter_title: str, section_number: str,
             outline_summary: str, lang_instructions: str, min_words: int
     ) -> str:
-        return f"""Quyidagi akademik ish bo'limining TO'LIQ matnini yozing.
+        return f"""{lang_instructions}
 
-Mavzu: {topic}
-Fan: {subject}
-Bob: {chapter_title}
-Bo'lim: {section_number}. {section_title}
+Write the FULL text of the following section of an academic work.
 
-Ishning umumiy strukturasi:
+Topic: {topic}
+Subject: {subject}
+Chapter: {chapter_title}
+Section: {section_number}. {section_title}
+
+Overall work structure:
 {outline_summary}
 
-BO'LIMDA QUYIDAGILAR BO'LISHI SHART:
+THE SECTION MUST CONTAIN:
 
-1. ASOSIY MATN (8-12 paragraf, har biri 6-10 gap):
-   - Mavzuni chuqur va batafsil yoritish
-   - Ilmiy manbalardan iqtiboslar keltirish (masalan: "Professor Karimovning ta'kidlashicha...")
-   - Aniq faktlar va statistik ma'lumotlar
-   - Misollar va dalillar
-   - Turli olimlarning fikrlarini keltirish va taqqoslash
-   - O'zbekiston va xalqaro kontekstda tahlil
+1. MAIN TEXT (8-12 paragraphs, 6-10 sentences each):
+   - Cover the topic deeply and in detail
+   - Include citations from scientific sources (e.g., "According to Professor X.Y...")
+   - Provide specific facts and statistical data
+   - Give examples and evidence
+   - Present and compare views of different scholars
+   - Analyze in both Uzbekistan and international context
 
-2. TAHLILIY QISM:
-   - Mavjud yondashuvlarni tanqidiy baholash
-   - Afzalliklar va kamchiliklarni ko'rsatish
-   - Qiyosiy tahlil
+2. ANALYTICAL PART:
+   - Critically evaluate existing approaches
+   - Show advantages and disadvantages
+   - Comparative analysis
 
-3. BO'LIM XULOSASI (1 paragraf):
-   - Bo'limda aytilgan asosiy fikrlarni umumlashtirish
+3. SECTION SUMMARY (1 paragraph):
+   - Summarize the main ideas presented in the section
 
-MUHIM QOIDALAR:
-- FAQAT shu bo'limning mazmunini yozing
-- Boshqa bo'limlar haqida yozmang
-- Haqiqiy, ishonchli ma'lumotlar yozing
-- Akademik ilmiy uslubda yozing
-- Plagiatdan xoli, original matn bo'lsin
+IMPORTANT RULES:
+- Write ONLY the content of this section
+- Do NOT write about other sections
+- Use real, reliable information
+- Write in academic scientific style
+- Original text, free from plagiarism
 
-JAMI KAMIDA {min_words} SO'Z YOZING! QISQARTIRMANG!
-To'g'ridan-to'g'ri matn yozing, hech qanday sarlavha, raqam yoki format belgisi ishlatmang.
-Paragraflarni bo'sh qator bilan ajrating."""
+WRITE AT LEAST {min_words} WORDS! DO NOT SHORTEN!
+Write plain text only, no headers, numbers, or formatting symbols.
+Separate paragraphs with empty lines."""
 
     # =========================================================================
     # UTILITY METHODS
