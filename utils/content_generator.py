@@ -77,7 +77,8 @@ class ContentGenerator:
             topic: str,
             details: str,
             slide_count: int,
-            use_gpt4: bool = False
+            use_gpt4: bool = False,
+            language: str = "uz"
     ) -> Dict:
         """
         Professional prezentatsiya uchun content yaratish
@@ -85,11 +86,19 @@ class ContentGenerator:
         """
         model = "gpt-4o"
 
+        lang_map = {
+            "uz": "O'zbek tilida",
+            "ru": "Русский язык (на русском языке)",
+            "en": "English (in English language)"
+        }
+        lang_instruction = lang_map.get(language, "O'zbek tilida")
+
         prompt = f"""Siz tajribali prezentatsiya mutaxassisisiz. Professional, batafsil va mazmunli prezentatsiya kontent yarating.
 
 MAVZU: {topic}
 QO'SHIMCHA MA'LUMOT: {details or "Yo'q"}
 SLAYDLAR SONI: {slide_count}
+TIL: {lang_instruction} — barcha matn (title, subtitle, content, bullet_points) shu tilda yozilsin!
 
 KONTENT QOIDALARI:
 1. Har bir slayd sarlavhasi aniq va tushunarli bo'lsin (4-8 so'z)

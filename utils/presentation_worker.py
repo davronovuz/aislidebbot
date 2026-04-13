@@ -663,8 +663,9 @@ Muvaffaqiyatlar! 🚀
                 topic = answers_data.get('topic', '')
                 details = answers_data.get('details', '')
                 slide_count = answers_data.get('slide_count', 10)
+                language = answers_data.get('language', 'uz')
                 return await self.content_generator.generate_presentation_content(
-                    topic, details, slide_count, use_gpt4=True
+                    topic, details, slide_count, use_gpt4=True, language=language
                 )
         except Exception as e:
             logger.error(f"Content generation xato: {e}")

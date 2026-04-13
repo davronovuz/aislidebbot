@@ -289,6 +289,8 @@ class ProPPTXGenerator:
         subtitle = content.get("subtitle", "")
         slides = content.get("slides", [])
 
+        total_slides = len(slides) + 1  # +1 title slayd
+
         # Title slayd
         self._create_title_slide(title, subtitle)
 
@@ -302,6 +304,9 @@ class ProPPTXGenerator:
                 variant = i % 3  # 0=standard, 1=card, 2=accent-bar
                 img_path = images.get(i)
                 self._create_content_slide(slide_data, variant, img_path)
+
+        # Slayd raqamlash (title slayddan tashqari)
+        self._add_slide_numbers(total_slides)
 
         self.prs.save(output_path)
 
@@ -1022,6 +1027,39 @@ class ProPPTXGenerator:
             spcPct.set('val', str(int(multiplier * 100000)))
         except Exception as e:
             logger.debug(f"Line spacing xato: {e}")
+
+    # ======================== SLIDE NUMBERS ========================
+
+    def _add_slide_numbers(self, total_slides: int):
+        """Barcha slaydlarga raqam qo'shish (title slayddan tashqari)"""
+        t = self.theme
+        is_dark = self._is_dark_theme()
+
+        for idx, slide in enumerate(self.prs.slides):
+            if idx == 0:
+                continue  # Title slaydga raqam qo'yilmaydi
+
+            num_text = f"{idx}/{total_slides - 1}"
+            num_color = t["subtitle_text"] if idx == len(self.prs.slides) - 1 else t.get("body_text", (100, 100, 100))
+
+            # Pastki o'ng burchakda kichik raqam
+            txBox = slide.shapes.add_textbox(
+                SLIDE_W - Inches(1.2), SLIDE_H - Inches(0.45),
+                Inches(0.9), Inches(0.3)
+            )
+            tf = txBox.text_frame
+            tf.word_wrap = False
+            p = tf.paragraphs[0]
+            p.text = num_text
+            p.font.size = Pt(9)
+            p.font.color.rgb = RGBColor(*num_color)
+            p.font.name = "Calibri"
+            p.alignment = PP_ALIGN.RIGHT
+
+    def _is_dark_theme(self):
+        """Tema qorong'i ekanligini aniqlash"""
+        bg = self.theme.get("slide_bg", (255, 255, 255))
+        return sum(bg) < 384  # O'rtacha 128 dan past = qorong'i
 
     # ======================== IMAGE FETCHING ========================
 
