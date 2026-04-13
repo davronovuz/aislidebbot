@@ -267,9 +267,11 @@ async def _handle_presentation_web_data(message: types.Message, data: dict):
             amount_charged = total_price
 
         task_uuid = str(uuid.uuid4())
+        language = data.get('language', 'uz')
         content_data = {
             'topic': topic, 'details': details,
-            'slide_count': slide_count, 'theme_id': theme_id
+            'slide_count': slide_count, 'theme_id': theme_id,
+            'language': language
         }
 
         task_id = user_db.create_presentation_task(

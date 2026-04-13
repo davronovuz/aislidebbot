@@ -294,6 +294,11 @@ class ProPPTXGenerator:
         # Title slayd
         self._create_title_slide(title, subtitle)
 
+        # Reja (agenda) slayd — 5+ slayd bo'lgandagina
+        if len(slides) >= 5:
+            slide_titles = [s.get("title", "") for s in slides]
+            self._create_agenda_slide(slide_titles)
+
         # Content slaydlar
         layout_cycle = [0, 1, 2, 3, 4]  # standard, card, accent-bar, split, stats
         for i, slide_data in enumerate(slides):
@@ -764,6 +769,121 @@ class ProPPTXGenerator:
                         SLIDE_W, Inches(0.12), t["accent"])
         self._add_rect(slide, SLIDE_W - Inches(3.5), SLIDE_H - Inches(0.12),
                         Inches(3.5), Inches(0.12), t["accent2"])
+
+    # ======================== AGENDA SLIDE ========================
+
+    def _create_agenda_slide(self, slide_titles: List[str]):
+        """Reja/Mundarija slayd — professional numbered list"""
+        slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
+        t = self.theme
+
+        self._set_solid_bg(slide, t["slide_bg"])
+
+        # Title bar
+        self._add_rect(slide, Inches(0), Inches(0),
+                        SLIDE_W, Inches(1.5), t["title_bg"][0])
+        self._add_rect(slide, Inches(0), Inches(1.5),
+                        SLIDE_W, Inches(0.06), t["accent"])
+
+        # "Reja" sarlavhasi
+        self._add_textbox(
+            slide, "Reja",
+            x=Inches(0.8), y=Inches(0.3),
+            w=Inches(11.7), h=Inches(0.9),
+            font_size=32, bold=True,
+            color=t["title_text"],
+            alignment=PP_ALIGN.LEFT,
+            font_name="Calibri Light",
+        )
+
+        # Slayd sarlavhalarini raqamlangan ro'yxat sifatida ko'rsatish
+        # Birinchi va oxirgisini (kirish/xulosa) olib tashlaymiz agar 7+ bo'lsa
+        items = slide_titles[:]
+
+        # Ikki ustunli layout (agar 6+ element bo'lsa)
+        if len(items) >= 6:
+            mid = (len(items) + 1) // 2
+            col1 = items[:mid]
+            col2 = items[mid:]
+
+            for col_idx, (col_items, col_x) in enumerate([
+                (col1, Inches(0.8)),
+                (col2, Inches(7.0))
+            ]):
+                y_pos = Inches(2.0)
+                for i, item_title in enumerate(col_items):
+                    num = i + 1 if col_idx == 0 else mid + i + 1
+
+                    # Raqam doira
+                    circle = self._add_rounded_rect(
+                        slide,
+                        x=col_x, y=y_pos,
+                        w=Inches(0.45), h=Inches(0.45),
+                        fill=t["accent"] if (num - 1) % 2 == 0 else t.get("accent2", t["accent"]),
+                        shadow=False,
+                    )
+                    self._add_textbox(
+                        slide, str(num),
+                        x=col_x, y=y_pos,
+                        w=Inches(0.45), h=Inches(0.45),
+                        font_size=13, bold=True,
+                        color=(255, 255, 255),
+                        alignment=PP_ALIGN.CENTER,
+                        font_name="Calibri",
+                    )
+
+                    # Sarlavha matni
+                    self._add_textbox(
+                        slide, item_title,
+                        x=col_x + Inches(0.65), y=y_pos + Inches(0.02),
+                        w=Inches(5.2), h=Inches(0.42),
+                        font_size=15, bold=False,
+                        color=t["body_text"],
+                        alignment=PP_ALIGN.LEFT,
+                        font_name="Calibri",
+                    )
+
+                    y_pos += Inches(0.65)
+        else:
+            # Bitta ustunli
+            y_pos = Inches(2.0)
+            for i, item_title in enumerate(items):
+                num = i + 1
+
+                # Raqam doira
+                self._add_rounded_rect(
+                    slide,
+                    x=Inches(1.5), y=y_pos,
+                    w=Inches(0.5), h=Inches(0.5),
+                    fill=t["accent"] if i % 2 == 0 else t.get("accent2", t["accent"]),
+                    shadow=False,
+                )
+                self._add_textbox(
+                    slide, str(num),
+                    x=Inches(1.5), y=y_pos,
+                    w=Inches(0.5), h=Inches(0.5),
+                    font_size=15, bold=True,
+                    color=(255, 255, 255),
+                    alignment=PP_ALIGN.CENTER,
+                    font_name="Calibri",
+                )
+
+                # Sarlavha matni
+                self._add_textbox(
+                    slide, item_title,
+                    x=Inches(2.3), y=y_pos + Inches(0.03),
+                    w=Inches(9), h=Inches(0.45),
+                    font_size=17, bold=False,
+                    color=t["body_text"],
+                    alignment=PP_ALIGN.LEFT,
+                    font_name="Calibri",
+                )
+
+                y_pos += Inches(0.72)
+
+        # Pastki chiziq
+        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.06),
+                        SLIDE_W, Inches(0.06), t["accent"])
 
     # ======================== SPLIT SLIDE ========================
 
