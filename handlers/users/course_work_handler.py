@@ -104,10 +104,14 @@ async def web_app_data_handler(message: types.Message, state: FSMContext):
         # ---------------------------------------------------------
         ai_generator = CourseWorkGenerator(api_key=OPENAI_API_KEY)
 
+        subject = data.get('subject_name', '').strip()
+        if not subject:
+            subject = topic.split()[0] if topic.split() else "Umumiy"
+
         content_json = await ai_generator.generate_course_work_content(
             work_type=data.get('work_type', 'referat'),
             topic=topic,
-            subject=data.get('subject_name', ''),
+            subject=subject,
             details=data.get('details', ''),
             page_count=int(data.get('page_count', 12)),
             language=data.get('language', 'uz')
