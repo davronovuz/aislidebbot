@@ -649,12 +649,21 @@ Muvaffaqiyatlar! 🚀
                 pass
 
     async def _generate_content(self, task_data: dict) -> Optional[dict]:
-        """Content yaratish"""
+        """Content yaratish — pre-generated yoki AI orqali"""
         task_type = task_data.get('type')
         answers_json = task_data.get('answers', '{}')
 
         try:
             answers_data = json.loads(answers_json)
+
+            # Yangi frontend — pre-generated content (AI allaqachon frontendda yaratgan)
+            if answers_data.get('pre_generated') and answers_data.get('slides'):
+                logger.info("✅ Pre-generated content ishlatilmoqda (frontend AI)")
+                return {
+                    'title': answers_data.get('title', answers_data.get('topic', '')),
+                    'subtitle': answers_data.get('subtitle', ''),
+                    'slides': answers_data['slides']
+                }
 
             if task_type == 'pitch_deck':
                 answers = answers_data.get('answers', [])

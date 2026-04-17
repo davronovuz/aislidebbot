@@ -274,6 +274,13 @@ async def _handle_presentation_web_data(message: types.Message, data: dict):
             'language': language
         }
 
+        # Yangi frontend — pre-generated content
+        if data.get('pre_generated'):
+            content_data['pre_generated'] = True
+            content_data['title'] = data.get('title', topic)
+            content_data['subtitle'] = data.get('subtitle', '')
+            content_data['slides'] = data.get('slides', [])
+
         task_id = user_db.create_presentation_task(
             telegram_id=telegram_id, task_uuid=task_uuid,
             presentation_type='basic', slide_count=slide_count,
