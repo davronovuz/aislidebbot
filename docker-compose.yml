@@ -11,6 +11,8 @@ services:
       - PIXABAY_API_KEY=${PIXABAY_API_KEY:-}
     volumes:
       - ./data:/app/data
+    ports:
+      - "8080:8080"
     depends_on:
       - presenton
     restart: unless-stopped
