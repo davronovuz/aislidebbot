@@ -19,6 +19,12 @@ from utils.themes_data import get_theme_by_id, get_theme_by_index, get_all_theme
 logger = logging.getLogger(__name__)
 
 
+def _kb(msg):
+    """main_menu_keyboard ni telegram_id bilan chaqirish — shortcut"""
+    tid = msg.from_user.id if hasattr(msg, 'from_user') and msg.from_user else None
+    return main_menu_keyboard(telegram_id=tid, user_db=user_db)
+
+
 # ==================== FSM STATES ====================
 class PitchDeckStates(StatesGroup):
     waiting_for_answer = State()
@@ -361,7 +367,7 @@ Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
                         f"Sizda: {current_balance:,.0f} so'm\n\n"
                         f"Balansni to'ldiring: 💳 To'ldirish",
                         parse_mode='HTML',
-                        reply_markup=main_menu_keyboard()
+                        reply_markup=_kb(message)
                     )
                     await state.finish()
                     return
@@ -373,7 +379,7 @@ Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
                     await message.answer(
                         "❌ <b>Balansdan yechishda xatolik!</b>\n\nBalansni tekshiring: 💰 Balansim",
                         parse_mode='HTML',
-                        reply_markup=main_menu_keyboard()
+                        reply_markup=_kb(message)
                     )
                     await state.finish()
                     return
@@ -427,7 +433,7 @@ Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
                 await state.finish()
                 return
 
-            await message.answer(success_text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
+            await message.answer(success_text, reply_markup=_kb(message), parse_mode='HTML')
             await state.finish()
 
             logger.info(f"✅ Pitch Deck task yaratildi: {task_uuid} | User: {telegram_id} | Free: {is_free}")
@@ -445,7 +451,7 @@ async def pitch_deck_answer(message: types.Message, state: FSMContext):
     # ✅ Bekor qilish tekshirish
     if message.text == "❌ Bekor qilish":
         await state.finish()
-        await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
+        await message.answer("❌ Bekor qilindi", reply_markup=_kb(message))
         return
 
     user_data = await state.get_data()
@@ -505,7 +511,7 @@ async def presentation_topic(message: types.Message, state: FSMContext):
     # ✅ Bekor qilish tekshirish
     if message.text == "❌ Bekor qilish":
         await state.finish()
-        await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
+        await message.answer("❌ Bekor qilindi", reply_markup=_kb(message))
         return
 
     topic = message.text.strip()
@@ -534,7 +540,7 @@ async def presentation_details(message: types.Message, state: FSMContext):
     # ✅ Bekor qilish tekshirish
     if message.text == "❌ Bekor qilish":
         await state.finish()
-        await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
+        await message.answer("❌ Bekor qilindi", reply_markup=_kb(message))
         return
 
     details = message.text.strip()
@@ -565,7 +571,7 @@ async def presentation_slide_count(message: types.Message, state: FSMContext):
     # ✅ Bekor qilish tekshirish
     if message.text == "❌ Bekor qilish":
         await state.finish()
-        await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
+        await message.answer("❌ Bekor qilindi", reply_markup=_kb(message))
         return
 
     try:
@@ -603,7 +609,7 @@ Yetishmayotgan: {(total_price - balance):,.0f} so'm
 
 Balansni to'ldiring: 💳 To'ldirish
 """
-            await message.answer(summary, parse_mode='HTML', reply_markup=main_menu_keyboard())
+            await message.answer(summary, parse_mode='HTML', reply_markup=_kb(message))
             await state.finish()
             return
 
@@ -795,7 +801,7 @@ Tayyor bo'lgach sizga <b>PPTX fayl</b> yuboriladi! 🎉
                     f"Kerakli: {total_price:,.0f} so'm\n"
                     f"Sizda: {current_balance:,.0f} so'm",
                     parse_mode='HTML',
-                    reply_markup=main_menu_keyboard()
+                    reply_markup=_kb(message)
                 )
                 await state.finish()
                 return
@@ -804,7 +810,7 @@ Tayyor bo'lgach sizga <b>PPTX fayl</b> yuboriladi! 🎉
 
             if not success:
                 await message.answer("❌ <b>Balansdan yechishda xatolik!</b>", parse_mode='HTML',
-                                     reply_markup=main_menu_keyboard())
+                                     reply_markup=_kb(message))
                 await state.finish()
                 return
 
@@ -863,7 +869,7 @@ Tayyor bo'lgach sizga <b>PPTX fayl</b> yuboriladi! 🎉
             await state.finish()
             return
 
-        await message.answer(success_text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
+        await message.answer(success_text, reply_markup=_kb(message), parse_mode='HTML')
         await state.finish()
 
         logger.info(
@@ -941,7 +947,7 @@ async def balance_topup_amount(message: types.Message, state: FSMContext):
     # ✅ Bekor qilish tekshirish
     if message.text == "❌ Bekor qilish":
         await state.finish()
-        await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
+        await message.answer("❌ Bekor qilindi", reply_markup=_kb(message))
         return
 
     try:
@@ -1025,7 +1031,7 @@ async def balance_topup_receipt(message: types.Message, state: FSMContext):
 Tasdiqlangach balansingizga avtomatik qo'shiladi! 💳
 """
 
-        await message.answer(success_text, reply_markup=main_menu_keyboard(), parse_mode='HTML')
+        await message.answer(success_text, reply_markup=_kb(message), parse_mode='HTML')
 
         user_name = message.from_user.full_name
         await send_admin_notification(trans_id, telegram_id, amount, file_id, user_name)
@@ -1047,7 +1053,7 @@ async def balance_receipt_text_handler(message: types.Message, state: FSMContext
     # Bekor qilish tekshirish
     if message.text == "❌ Bekor qilish":
         await state.finish()
-        await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
+        await message.answer("❌ Bekor qilindi", reply_markup=_kb(message))
         return
 
     await message.answer("📸 Iltimos, chek <b>rasm</b> yoki <b>fayl</b> sifatida yuboring!", parse_mode='HTML')
@@ -1060,15 +1066,15 @@ async def cancel_handler(message: types.Message, state: FSMContext):
 
     if current_state:
         await state.finish()
-        await message.answer("❌ Jarayon bekor qilindi", reply_markup=main_menu_keyboard())
+        await message.answer("❌ Jarayon bekor qilindi", reply_markup=_kb(message))
     else:
-        await message.answer("Hozir hech narsa bajarilmayapti", reply_markup=main_menu_keyboard())
+        await message.answer("Hozir hech narsa bajarilmayapti", reply_markup=_kb(message))
 
 
 @dp.message_handler(Text(equals="❌ Yo'q"), state='*')
 async def no_handler(message: types.Message, state: FSMContext):
     await state.finish()
-    await message.answer("❌ Bekor qilindi", reply_markup=main_menu_keyboard())
+    await message.answer("❌ Bekor qilindi", reply_markup=_kb(message))
 
 
 # ==================== NARXLAR ====================
