@@ -75,8 +75,8 @@ def main_menu_keyboard(telegram_id=None, user_db=None):
     ✅ Prezentatsiya va Mustaqil ish to'g'ridan-to'g'ri WebApp ochadi
     ✅ Narxlar va balans URL orqali uzatiladi
     """
-    pres_url = WEB_APP_BASE_URL + "?type=presentation"
-    cw_url = WEB_APP_BASE_URL
+    pres_url = WEB_APP_BASE_URL + f"?type=presentation&telegram_id={telegram_id or ''}"
+    cw_url = WEB_APP_BASE_URL + f"?telegram_id={telegram_id or ''}"
 
     if telegram_id and user_db:
         try:
@@ -85,7 +85,7 @@ def main_menu_keyboard(telegram_id=None, user_db=None):
             price_per_slide = user_db.get_price('slide_basic') or 500
             price_per_page = user_db.get_price('page_basic') or 500
             pres_url += f"&balance={balance}&free={free_left}&price={price_per_slide}"
-            cw_url += f"?balance={balance}&price={price_per_page}"
+            cw_url += f"&balance={balance}&price={price_per_page}"
         except Exception:
             pass
 
