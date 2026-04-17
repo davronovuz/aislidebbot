@@ -321,11 +321,13 @@ async def presentation_webapp(message: types.Message, state: FSMContext):
         await state.finish()
         logger.info("State tozalandi")
 
+    user_id = message.from_user.id
+    webapp_url = f"{WEB_APP_URL}?telegram_id={user_id}"
     keyboard = InlineKeyboardMarkup()
     keyboard.add(
         InlineKeyboardButton(
             text="🎨 Prezentatsiya yaratish",
-            web_app=WebAppInfo(url=WEB_APP_URL)
+            web_app=WebAppInfo(url=webapp_url)
         )
     )
 
