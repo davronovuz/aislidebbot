@@ -437,7 +437,21 @@ class ProPPTXGenerator:
         bullets = data.get("bullet_points", [])
         y = Inches(2.0)
 
-        if content:
+        # Agar content + bullets bo'lsa, content ni qisqartirib ko'rsatish
+        if content and bullets:
+            # Content qisqa bo'lsin — faqat 200 belgigacha
+            if len(content) > 200:
+                content = content[:197] + '...'
+            self._add_textbox(
+                slide, content,
+                x=Inches(0.8), y=y,
+                w=Inches(11.7), h=Inches(1.2),
+                font_size=15, bold=False,
+                color=t["body_text"],
+                line_spacing=1.3,
+            )
+            y = Inches(3.3)
+        elif content:
             self._add_textbox(
                 slide, content,
                 x=Inches(0.8), y=y,
@@ -453,7 +467,7 @@ class ProPPTXGenerator:
                 slide, bullets,
                 x=Inches(1.0), y=y,
                 w=Inches(11.3), h=SLIDE_H - y - Inches(0.5),
-                font_size=16, color=t["body_text"],
+                font_size=15, color=t["body_text"],
                 bullet_color=t["bullet_accent"],
             )
 
@@ -1143,10 +1157,15 @@ class ProPPTXGenerator:
         tf.margin_top = Inches(0.05)
         tf.margin_bottom = Inches(0.05)
 
+        # Maksimum 4 ta bullet, har biri 120 belgigacha
+        bullets = bullets[:4]
+
         for idx, bullet in enumerate(bullets):
             bullet = bullet.strip()
             if not bullet:
                 continue
+            if len(bullet) > 120:
+                bullet = bullet[:117] + '...'
 
             # Mavjud bullet belgilarini olib tashlash
             for prefix in ('•', '●', '○', '▪', '▸', '-', '–', '—', '*'):
@@ -1353,7 +1372,7 @@ class ProPPTXGenerator:
                     bodyPr.remove(existing)
 
             normAutofit = etree.SubElement(bodyPr, qn('a:normAutofit'))
-            normAutofit.set('fontScale', '100000')
+            normAutofit.set('fontScale', '62500')
             normAutofit.set('lnSpcReduction', '20000')
         except Exception as e:
             logger.debug(f"Autofit xato: {e}")
