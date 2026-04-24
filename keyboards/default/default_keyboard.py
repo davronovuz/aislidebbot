@@ -19,11 +19,11 @@ menu_admin = ReplyKeyboardMarkup(
             KeyboardButton(text='💳 Tranzaksiyalar'),
         ],
         [
-            KeyboardButton(text='👤 Foydalanuvchi malumotlari'),
+            KeyboardButton(text='⭐ Obuna boshqarish'),
             KeyboardButton(text='💵 Balans qoshish'),
         ],
         [
-            KeyboardButton(text='📄 Yordam'),
+            KeyboardButton(text='👤 Foydalanuvchi malumotlari'),
             KeyboardButton(text='🔙 Ortga qaytish'),
         ],
     ],
@@ -75,8 +75,12 @@ def main_menu_keyboard(telegram_id=None, user_db=None):
     ✅ Prezentatsiya va Mustaqil ish to'g'ridan-to'g'ri WebApp ochadi
     ✅ Narxlar va balans URL orqali uzatiladi
     """
-    pres_url = WEB_APP_BASE_URL + f"?type=presentation&telegram_id={telegram_id or ''}"
-    cw_url = WEB_APP_BASE_URL + f"?telegram_id={telegram_id or ''}"
+    if telegram_id:
+        pres_url = WEB_APP_BASE_URL + f"?type=presentation&telegram_id={telegram_id}"
+        cw_url = WEB_APP_BASE_URL + f"?telegram_id={telegram_id}"
+    else:
+        pres_url = WEB_APP_BASE_URL + "?type=presentation"
+        cw_url = WEB_APP_BASE_URL
 
     if telegram_id and user_db:
         try:
@@ -86,6 +90,12 @@ def main_menu_keyboard(telegram_id=None, user_db=None):
             price_per_page = user_db.get_price('page_basic') or 500
             pres_url += f"&balance={balance}&free={free_left}&price={price_per_slide}"
             cw_url += f"&balance={balance}&price={price_per_page}"
+
+            # Obuna ma'lumoti
+            sub = user_db.get_user_subscription(telegram_id)
+            if sub:
+                pres_url += f"&sub={sub['plan_name']}&sub_pres_left={sub['max_presentations'] - sub['presentations_used']}&sub_max_slides={sub['max_slides']}"
+                cw_url += f"&sub={sub['plan_name']}&sub_cw_left={sub['max_courseworks'] - sub['courseworks_used']}"
         except Exception:
             pass
 
@@ -102,7 +112,10 @@ def main_menu_keyboard(telegram_id=None, user_db=None):
                 KeyboardButton("💳 To'ldirish")
             ],
             [
+                KeyboardButton("⭐ Obuna"),
                 KeyboardButton("💵 Narxlar"),
+            ],
+            [
                 KeyboardButton("ℹ️ Yordam")
             ]
         ],
