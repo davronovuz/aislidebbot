@@ -263,7 +263,7 @@ MUHIM:
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 messages=[
                     {
                         "role": "system",
@@ -383,7 +383,7 @@ IMPORTANT RULES:
             system_content = system_prompts.get(language, system_prompts['uz'])
 
             response = await self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 messages=[
                     {
                         "role": "system",
@@ -461,7 +461,7 @@ Write ONLY the list, no extra text."""
 
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 messages=[
                     {
                         "role": "system",

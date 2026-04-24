@@ -84,7 +84,7 @@ class ContentGenerator:
         Professional prezentatsiya uchun content yaratish
         GPT-4o bilan ishlaydi
         """
-        model = "gpt-4o"
+        model = "gpt-4o-mini"
 
         lang_map = {
             "uz": "O'zbek tilida",
