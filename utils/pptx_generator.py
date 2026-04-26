@@ -1,15 +1,16 @@
 """
-Professional PPTX Generator — Gamma-darajaga yaqin sifat
+Professional PPTX Generator — Canva/PowerPoint template darajasida
 python-pptx kutubxonasi asosida
 
 Xususiyatlar:
 - 11 ta professional rang temalari
-- 5 xil slayd layouti (title, standard, card, accent-bar, image+text, xulosa)
-- Gradient backgroundlar
-- Shadow effektlar
+- 7 xil slayd layouti (title, standard, card, accent-bar, split, image+text, highlight, conclusion)
+- Professional gradient backgroundlar (multi-stop)
+- Soft shadow effektlar
 - Smart text autofit
-- Pixabay rasm integratsiyasi
+- Pixabay rasm integratsiyasi + image overlay
 - 16:9 format
+- Decorativ geometric elementlar (doiralar, chiziqlar, shapelar)
 """
 
 import logging
@@ -30,7 +31,7 @@ from lxml import etree
 logger = logging.getLogger(__name__)
 
 # =====================================================================
-#  RANGLAR TEMALARI — har biri to'liq rang sxemasi
+#  RANGLAR TEMALARI — professional rang sxemalari
 # =====================================================================
 
 THEMES = {
@@ -47,6 +48,7 @@ THEMES = {
         "subtitle_text": (180, 200, 230),
         "card_bg": (255, 255, 255),
         "card_border": (226, 232, 240),
+        "muted": (148, 163, 184),
     },
     "dark_elegant": {
         "name": "Dark Elegant",
@@ -61,6 +63,7 @@ THEMES = {
         "subtitle_text": (150, 150, 180),
         "card_bg": (36, 36, 52),
         "card_border": (55, 55, 75),
+        "muted": (100, 100, 130),
     },
     "minimalist": {
         "name": "Minimalist",
@@ -75,6 +78,7 @@ THEMES = {
         "subtitle_text": (100, 100, 100),
         "card_bg": (250, 250, 250),
         "card_border": (220, 220, 220),
+        "muted": (170, 170, 170),
     },
     "ocean_fresh": {
         "name": "Ocean Fresh",
@@ -89,6 +93,7 @@ THEMES = {
         "subtitle_text": (178, 223, 219),
         "card_bg": (255, 255, 255),
         "card_border": (204, 239, 233),
+        "muted": (128, 188, 178),
     },
     "purple_premium": {
         "name": "Purple Premium",
@@ -103,6 +108,7 @@ THEMES = {
         "subtitle_text": (196, 181, 253),
         "card_bg": (255, 255, 255),
         "card_border": (233, 213, 255),
+        "muted": (168, 148, 200),
     },
     "coral_warm": {
         "name": "Coral Warm",
@@ -117,6 +123,7 @@ THEMES = {
         "subtitle_text": (254, 202, 202),
         "card_bg": (255, 255, 255),
         "card_border": (254, 226, 226),
+        "muted": (200, 140, 140),
     },
     "rose_creative": {
         "name": "Rose Creative",
@@ -131,6 +138,7 @@ THEMES = {
         "subtitle_text": (251, 207, 232),
         "card_bg": (255, 255, 255),
         "card_border": (252, 231, 243),
+        "muted": (200, 150, 175),
     },
     "colorful_bright": {
         "name": "Colorful Bright",
@@ -145,6 +153,7 @@ THEMES = {
         "subtitle_text": (191, 219, 254),
         "card_bg": (255, 255, 255),
         "card_border": (224, 231, 255),
+        "muted": (148, 163, 200),
     },
     "warm_classic": {
         "name": "Warm Classic",
@@ -159,6 +168,7 @@ THEMES = {
         "subtitle_text": (220, 200, 170),
         "card_bg": (255, 255, 255),
         "card_border": (237, 228, 210),
+        "muted": (185, 170, 145),
     },
     "cosmic_dark": {
         "name": "Cosmic Dark",
@@ -173,6 +183,7 @@ THEMES = {
         "subtitle_text": (150, 150, 200),
         "card_bg": (28, 22, 56),
         "card_border": (50, 42, 80),
+        "muted": (120, 115, 165),
     },
     "green_nature": {
         "name": "Green Nature",
@@ -187,6 +198,7 @@ THEMES = {
         "subtitle_text": (187, 247, 208),
         "card_bg": (255, 255, 255),
         "card_border": (209, 250, 229),
+        "muted": (128, 200, 160),
     },
 }
 
@@ -210,6 +222,10 @@ DEFAULT_THEME = "modern_blue"
 SLIDE_W = Inches(13.333)
 SLIDE_H = Inches(7.5)
 
+# Font konstantalari
+FONT_HEADING = "Calibri Light"
+FONT_BODY = "Calibri"
+
 
 # =====================================================================
 #  GENERATOR CLASS
@@ -217,11 +233,7 @@ SLIDE_H = Inches(7.5)
 
 class ProPPTXGenerator:
     """
-    Professional PPTX generator — python-pptx asosida
-
-    Foydalanish:
-        gen = ProPPTXGenerator(theme_id="blues")
-        success = await gen.generate(content, "output.pptx")
+    Professional PPTX generator — Canva/PowerPoint template darajasida
     """
 
     def __init__(self, theme_id: str = None):
@@ -243,25 +255,10 @@ class ProPPTXGenerator:
         output_path: str,
         pixabay_api_key: str = None,
     ) -> bool:
-        """
-        Professional PPTX yaratish
-
-        Args:
-            content: GPT-4o dan kelgan content dict
-            output_path: Chiqish fayl yo'li
-            pixabay_api_key: Pixabay API kaliti (ixtiyoriy)
-
-        Returns:
-            True — muvaffaqiyatli
-        """
         try:
-            # 1. Rasmlarni yuklab olish (Unsplash bepul, Pixabay fallback)
             images = await self._fetch_images(content, pixabay_api_key)
-
-            # 2. PPTX yaratish
             self._build(content, images, output_path)
 
-            # 3. Vaqtinchalik rasmlarni tozalash
             for img_path in images.values():
                 try:
                     if img_path and os.path.exists(img_path):
@@ -280,7 +277,6 @@ class ProPPTXGenerator:
     # ======================== BUILD ========================
 
     def _build(self, content: Dict, images: Dict, output_path: str):
-        """PPTX ni qurib saqlash"""
         self.prs = Presentation()
         self.prs.slide_width = SLIDE_W
         self.prs.slide_height = SLIDE_H
@@ -289,7 +285,7 @@ class ProPPTXGenerator:
         subtitle = content.get("subtitle", "")
         slides = content.get("slides", [])
 
-        total_slides = len(slides) + 1  # +1 title slayd
+        total_slides = len(slides) + 1
 
         # Title slayd
         self._create_title_slide(title, subtitle)
@@ -300,7 +296,7 @@ class ProPPTXGenerator:
             self._create_agenda_slide(slide_titles)
 
         # Content slaydlar
-        layout_cycle = [0, 1, 2, 3, 4]  # standard, card, accent-bar, split, stats
+        layout_cycle = [0, 1, 2, 3, 4]
         for i, slide_data in enumerate(slides):
             is_last = (i == len(slides) - 1)
 
@@ -314,7 +310,7 @@ class ProPPTXGenerator:
         # "Rahmat" yakuniy slayd
         self._create_thank_you_slide(title)
 
-        # Slayd raqamlash (title va thank you dan tashqari)
+        # Slayd raqamlash
         total_slides = len(self.prs.slides)
         self._add_slide_numbers(total_slides)
 
@@ -323,71 +319,91 @@ class ProPPTXGenerator:
     # ======================== TITLE SLIDE ========================
 
     def _create_title_slide(self, title: str, subtitle: str):
-        """Premium title slayd — gradient bg, geometric dekor, professional branding"""
-        slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])  # Blank
+        """Premium title slayd — dramatic gradient, geometric dekor, bold typography"""
+        slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
         t = self.theme
 
         # Gradient background
         self._set_gradient_bg(slide, t["title_bg"][0], t["title_bg"][1])
 
-        # Yuqori chap — dekorativ chiziq
-        self._add_rect(slide, Inches(1), Inches(0.6),
-                        Inches(3), Inches(0.06), t["accent2"])
+        # ---- Decorativ geometric elementlar ----
 
-        # Yuqori o'ng — kichik dekorativ elementlar
-        self._add_rect(slide, Inches(11), Inches(0.5),
-                        Inches(0.6), Inches(0.6), t["accent"], alpha=25)
-        self._add_rect(slide, Inches(11.8), Inches(0.5),
-                        Inches(0.3), Inches(0.3), t["accent2"], alpha=35)
+        # Katta shaffof doira — o'ng yuqori (Canva style)
+        self._add_oval(slide,
+                       x=Inches(9.5), y=Inches(-1.5),
+                       w=Inches(5.5), h=Inches(5.5),
+                       fill=t["accent"], alpha=8)
 
-        # Chap vertikal accent chiziq (branding)
-        self._add_rect(slide, Inches(0.7), Inches(1.8),
-                        Inches(0.08), Inches(3.5), t["accent"])
+        # Kichik shaffof doira — chap past
+        self._add_oval(slide,
+                       x=Inches(-1), y=Inches(5.5),
+                       w=Inches(3), h=Inches(3),
+                       fill=t["accent2"], alpha=12)
 
-        # Title
+        # O'rta o'lchamli doira — o'ng past
+        self._add_oval(slide,
+                       x=Inches(11), y=Inches(5),
+                       w=Inches(2.2), h=Inches(2.2),
+                       fill=t["accent2"], alpha=10)
+
+        # Yuqori chap — ikkita parallel dekor chiziq
+        self._add_rect(slide, Inches(0.9), Inches(0.7),
+                       Inches(2.8), Inches(0.05), t["accent2"], alpha=60)
+        self._add_rect(slide, Inches(0.9), Inches(0.85),
+                       Inches(1.5), Inches(0.05), t["accent"], alpha=40)
+
+        # Chap vertikal accent chiziq (branding — qalinroq)
+        self._add_rect(slide, Inches(0.7), Inches(1.6),
+                       Inches(0.1), Inches(3.8), t["accent"])
+
+        # ---- Title typography ----
         self._add_textbox(
             slide, title,
-            x=Inches(1.2), y=Inches(2.0),
-            w=Inches(10.5), h=Inches(2.2),
-            font_size=44, bold=True,
+            x=Inches(1.2), y=Inches(1.8),
+            w=Inches(10), h=Inches(2.6),
+            font_size=48, bold=True,
             color=t["title_text"],
             alignment=PP_ALIGN.LEFT,
-            font_name="Calibri Light",
+            font_name=FONT_HEADING,
+            line_spacing=1.1,
+            autofit=False,
         )
 
-        # Accent chiziq title ostida
-        self._add_rect(slide, Inches(1.2), Inches(4.3),
-                        Inches(4.5), Inches(0.08), t["accent2"])
+        # Accent chiziq title ostida (gradient effekt — 2 chiziq)
+        self._add_rect(slide, Inches(1.2), Inches(4.5),
+                       Inches(3.5), Inches(0.07), t["accent2"])
+        self._add_rect(slide, Inches(1.2), Inches(4.65),
+                       Inches(1.8), Inches(0.04), t["accent"], alpha=50)
 
         # Subtitle
         if subtitle:
             self._add_textbox(
                 slide, subtitle,
-                x=Inches(1.2), y=Inches(4.7),
-                w=Inches(9), h=Inches(1.3),
+                x=Inches(1.2), y=Inches(5.0),
+                w=Inches(8.5), h=Inches(1.2),
                 font_size=20, bold=False,
                 color=t["subtitle_text"],
                 alignment=PP_ALIGN.LEFT,
+                font_name=FONT_BODY,
+                line_spacing=1.4,
             )
 
-        # Pastki dekorativ zona
-        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.14),
-                        SLIDE_W, Inches(0.14), t["accent"])
-        self._add_rect(slide, SLIDE_W - Inches(4), SLIDE_H - Inches(0.14),
-                        Inches(4), Inches(0.14), t["accent2"])
+        # Pastki dekorativ zona — ikki qatlamli
+        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.18),
+                       SLIDE_W, Inches(0.18), t["accent"])
+        self._add_rect(slide, SLIDE_W - Inches(4.5), SLIDE_H - Inches(0.18),
+                       Inches(4.5), Inches(0.18), t["accent2"])
 
-        # Pastki chap — kichik geometrik element
-        self._add_rect(slide, Inches(1), SLIDE_H - Inches(0.7),
-                        Inches(0.35), Inches(0.35), t["accent2"], alpha=30)
+        # Pastki chap — dekor doira
+        self._add_oval(slide, Inches(0.8), SLIDE_H - Inches(1.1),
+                       Inches(0.4), Inches(0.4), t["accent2"], alpha=35)
 
     # ======================== CONTENT SLIDES ========================
 
     def _create_content_slide(self, data: Dict, variant: int, image_path: str = None):
-        """Content slayd — layout variant tanlash"""
         has_image = image_path and os.path.exists(image_path)
 
         if has_image:
-            # Rasmli variantlar almashib turadi
             if variant in (1, 3):
                 self._create_card_slide(data, image_path)
             else:
@@ -406,119 +422,134 @@ class ProPPTXGenerator:
             self._create_standard_slide(data)
 
     def _create_standard_slide(self, data: Dict):
-        """Standard layout — rangli title bar yuqorida, kontent pastda"""
+        """Standard layout — gradient title bar, yaxshi tipografiya, dekor elementlar"""
         slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
         t = self.theme
 
         self._set_solid_bg(slide, t["slide_bg"])
 
-        # Title bar (to'liq kenglik)
-        self._add_rect(slide, Inches(0), Inches(0),
-                        SLIDE_W, Inches(1.5), t["title_bg"][0])
+        # Title bar — gradient (2 rang)
+        self._add_gradient_rect(slide, Inches(0), Inches(0),
+                                SLIDE_W, Inches(1.6),
+                                t["title_bg"][0], t["title_bg"][1])
 
-        # Title bar ostida accent chiziq
-        self._add_rect(slide, Inches(0), Inches(1.5),
-                        SLIDE_W, Inches(0.06), t["accent"])
+        # Title bar ostida accent chiziq (qalinroq, professional)
+        self._add_rect(slide, Inches(0), Inches(1.6),
+                       SLIDE_W, Inches(0.05), t["accent"])
+
+        # Dekor — title bar ichida shaffof doira
+        self._add_oval(slide, Inches(10.5), Inches(-0.4),
+                       Inches(2.5), Inches(2.5),
+                       t["accent"], alpha=8)
 
         # Title text
         title = data.get("title", "")
         self._add_textbox(
             slide, title,
-            x=Inches(0.8), y=Inches(0.3),
-            w=Inches(11.7), h=Inches(0.9),
-            font_size=30, bold=True,
+            x=Inches(1.0), y=Inches(0.25),
+            w=Inches(11.3), h=Inches(1.05),
+            font_size=32, bold=True,
             color=t["title_text"],
             alignment=PP_ALIGN.LEFT,
-            font_name="Calibri Light",
+            font_name=FONT_HEADING,
+            autofit=False,
         )
 
         # Content va bullets
         content = data.get("content", "")
         bullets = data.get("bullet_points", [])
-        y = Inches(2.0)
+        y = Inches(2.1)
 
-        # Agar content + bullets bo'lsa, content ni qisqartirib ko'rsatish
         if content and bullets:
-            # Content qisqa bo'lsin — faqat 200 belgigacha
-            if len(content) > 200:
-                content = content[:197] + '...'
+            if len(content) > 300:
+                content = content[:297] + '...'
             self._add_textbox(
                 slide, content,
-                x=Inches(0.8), y=y,
-                w=Inches(11.7), h=Inches(1.2),
-                font_size=15, bold=False,
-                color=t["body_text"],
-                line_spacing=1.3,
-            )
-            y = Inches(3.3)
-        elif content:
-            self._add_textbox(
-                slide, content,
-                x=Inches(0.8), y=y,
-                w=Inches(11.7), h=Inches(1.6),
-                font_size=17, bold=False,
+                x=Inches(1.0), y=y,
+                w=Inches(11.3), h=Inches(1.4),
+                font_size=16, bold=False,
                 color=t["body_text"],
                 line_spacing=1.4,
             )
-            y = Inches(3.7)
+            y = Inches(3.6)
+        elif content:
+            self._add_textbox(
+                slide, content,
+                x=Inches(1.0), y=y,
+                w=Inches(11.3), h=Inches(1.6),
+                font_size=17, bold=False,
+                color=t["body_text"],
+                line_spacing=1.5,
+            )
+            y = Inches(3.8)
 
         if bullets:
-            self._add_bullet_textbox(
+            self._add_bullet_cards(
                 slide, bullets,
                 x=Inches(1.0), y=y,
-                w=Inches(11.3), h=SLIDE_H - y - Inches(0.5),
+                w=Inches(11.3), h=SLIDE_H - y - Inches(0.6),
                 font_size=15, color=t["body_text"],
                 bullet_color=t["bullet_accent"],
+                accent_color=t["accent"],
             )
 
-        # Pastki chiziq
-        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.06),
-                        SLIDE_W, Inches(0.06), t["accent"])
+        # Pastki dekor
+        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.05),
+                       SLIDE_W, Inches(0.05), t["accent"])
 
     def _create_card_slide(self, data: Dict, image_path: str = None):
-        """Card layout — kontent karta ichida, soyali, ixtiyoriy rasm"""
+        """Card layout — elevated karta, soyali, professional spacing"""
         slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
         t = self.theme
 
         self._set_solid_bg(slide, t["slide_bg"])
 
-        # Title (karta ustida)
+        # Dekor — yuqori o'ng burchakda shaffof doira
+        self._add_oval(slide, Inches(11), Inches(-0.5),
+                       Inches(2.5), Inches(2.5),
+                       t["accent"], alpha=6)
+
+        # Title
         title = data.get("title", "")
         self._add_textbox(
             slide, title,
-            x=Inches(0.8), y=Inches(0.4),
-            w=Inches(11.7), h=Inches(0.85),
-            font_size=28, bold=True,
+            x=Inches(1.0), y=Inches(0.4),
+            w=Inches(11.3), h=Inches(0.9),
+            font_size=30, bold=True,
             color=t["title_on_light"],
             alignment=PP_ALIGN.LEFT,
-            font_name="Calibri Light",
+            font_name=FONT_HEADING,
+            autofit=False,
         )
 
         # Title ostida accent chiziq
-        self._add_rect(slide, Inches(0.8), Inches(1.3),
-                        Inches(3), Inches(0.06), t["accent"])
+        self._add_rect(slide, Inches(1.0), Inches(1.35),
+                       Inches(2.5), Inches(0.06), t["accent"])
+        self._add_rect(slide, Inches(3.6), Inches(1.35),
+                       Inches(0.8), Inches(0.06), t["accent2"], alpha=40)
 
         # Rasmli yoki rasmsiz karta
         has_image = image_path and os.path.exists(image_path)
 
         if has_image:
-            # Rasm o'ng tomonda, karta chapda
-            card = self._add_rounded_rect(
+            # Karta chapda
+            self._add_rounded_rect(
                 slide,
-                x=Inches(0.6), y=Inches(1.75),
-                w=Inches(7.5), h=Inches(5.2),
+                x=Inches(0.7), y=Inches(1.8),
+                w=Inches(7.3), h=Inches(5.1),
                 fill=t["card_bg"],
                 border_color=t.get("card_border"),
                 shadow=True,
             )
-            self._add_rect(slide, Inches(0.6), Inches(1.75),
-                            Inches(0.07), Inches(5.2), t["accent"])
+            # Chap accent chiziq (gradient effekt)
+            self._add_rect(slide, Inches(0.7), Inches(1.8),
+                           Inches(0.08), Inches(5.1), t["accent"])
 
-            # Rasm
-            img_frame = self._add_rounded_rect(
+            # Rasm o'ngda — rounded frame
+            self._add_rounded_rect(
                 slide,
-                x=Inches(8.5), y=Inches(1.75),
-                w=Inches(4.3), h=Inches(5.2),
+                x=Inches(8.3), y=Inches(1.8),
+                w=Inches(4.5), h=Inches(5.1),
                 fill=t["card_bg"],
                 border_color=t.get("card_border"),
                 shadow=True,
@@ -526,166 +557,188 @@ class ProPPTXGenerator:
             try:
                 slide.shapes.add_picture(
                     image_path,
-                    left=Inches(8.65), top=Inches(1.9),
-                    width=Inches(4.0), height=Inches(4.9),
+                    left=Inches(8.45), top=Inches(1.95),
+                    width=Inches(4.2), height=Inches(4.8),
                 )
             except Exception as e:
                 logger.warning(f"Rasm qo'shishda xato: {e}")
 
-            content_w = Inches(6.5)
-            content_x = Inches(1.3)
+            content_w = Inches(6.3)
+            content_x = Inches(1.4)
             bullet_x = Inches(1.5)
-            bullet_w = Inches(6.0)
+            bullet_w = Inches(5.8)
         else:
-            card = self._add_rounded_rect(
+            self._add_rounded_rect(
                 slide,
-                x=Inches(0.6), y=Inches(1.75),
-                w=Inches(12.1), h=Inches(5.2),
+                x=Inches(0.7), y=Inches(1.8),
+                w=Inches(11.9), h=Inches(5.1),
                 fill=t["card_bg"],
                 border_color=t.get("card_border"),
                 shadow=True,
             )
-            self._add_rect(slide, Inches(0.6), Inches(1.75),
-                            Inches(0.07), Inches(5.2), t["accent"])
+            # Chap accent chiziq
+            self._add_rect(slide, Inches(0.7), Inches(1.8),
+                           Inches(0.08), Inches(5.1), t["accent"])
 
-            content_w = Inches(10.7)
-            content_x = Inches(1.3)
+            content_w = Inches(10.5)
+            content_x = Inches(1.4)
             bullet_x = Inches(1.5)
-            bullet_w = Inches(10.2)
+            bullet_w = Inches(10.0)
 
         # Card ichida content
         content = data.get("content", "")
         bullets = data.get("bullet_points", [])
-        y = Inches(2.15)
+        y = Inches(2.2)
 
         if content:
+            if len(content) > 300:
+                content = content[:297] + '...'
             self._add_textbox(
                 slide, content,
                 x=content_x, y=y,
-                w=content_w, h=Inches(1.5),
-                font_size=17, bold=False,
+                w=content_w, h=Inches(1.3),
+                font_size=16, bold=False,
                 color=t["body_text"],
                 line_spacing=1.4,
             )
-            y = Inches(3.7)
+            y = Inches(3.6)
 
         if bullets:
             self._add_bullet_textbox(
                 slide, bullets,
                 x=bullet_x, y=y,
                 w=bullet_w, h=Inches(3.0),
-                font_size=16, color=t["body_text"],
+                font_size=15, color=t["body_text"],
                 bullet_color=t["bullet_accent"],
             )
 
     def _create_accent_bar_slide(self, data: Dict):
-        """Accent bar layout — chapda rangli bar, ikki ustunli bullets"""
+        """Accent bar layout — chapda gradient bar, dekor elementlar, professional bullets"""
         slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
         t = self.theme
 
         self._set_solid_bg(slide, t["slide_bg"])
 
-        # Chap katta accent bar
-        self._add_rect(slide, Inches(0), Inches(0),
-                        Inches(0.45), SLIDE_H, t["title_bg"][0])
+        # Chap katta accent bar — gradient
+        self._add_gradient_rect(slide, Inches(0), Inches(0),
+                                Inches(0.5), SLIDE_H,
+                                t["title_bg"][0], t["title_bg"][1],
+                                angle=5400000)
 
         # Bar yonida ingichka accent chiziq
-        self._add_rect(slide, Inches(0.45), Inches(0),
-                        Inches(0.06), SLIDE_H, t["accent"])
+        self._add_rect(slide, Inches(0.5), Inches(0),
+                       Inches(0.05), SLIDE_H, t["accent"])
 
-        # Yuqori o'ng burchakda kichik dekorativ element
-        self._add_rect(slide, SLIDE_W - Inches(2), Inches(0.4),
-                        Inches(1.2), Inches(0.06), t["accent2"])
+        # Dekor — yuqori o'ng burchakda
+        self._add_oval(slide, Inches(11.5), Inches(-0.3),
+                       Inches(2), Inches(2),
+                       t["accent"], alpha=5)
+
+        # Yuqori o'ng burchakda kichik dekorativ chiziqlar
+        self._add_rect(slide, SLIDE_W - Inches(2.5), Inches(0.4),
+                       Inches(1.5), Inches(0.04), t["accent2"], alpha=40)
+        self._add_rect(slide, SLIDE_W - Inches(1.8), Inches(0.55),
+                       Inches(0.8), Inches(0.04), t["accent"], alpha=30)
 
         # Title
         title = data.get("title", "")
         self._add_textbox(
             slide, title,
-            x=Inches(1.1), y=Inches(0.45),
-            w=Inches(11.7), h=Inches(0.85),
-            font_size=28, bold=True,
+            x=Inches(1.2), y=Inches(0.45),
+            w=Inches(11.5), h=Inches(0.9),
+            font_size=30, bold=True,
             color=t["title_on_light"],
             alignment=PP_ALIGN.LEFT,
-            font_name="Calibri Light",
+            font_name=FONT_HEADING,
+            autofit=False,
         )
 
         # Divider
-        self._add_rect(slide, Inches(1.1), Inches(1.4),
-                        Inches(2.5), Inches(0.05), t["accent"])
+        self._add_rect(slide, Inches(1.2), Inches(1.45),
+                       Inches(2.2), Inches(0.05), t["accent"])
 
         # Content
         content = data.get("content", "")
         bullets = data.get("bullet_points", [])
-        y = Inches(1.85)
+        y = Inches(1.9)
 
         if content:
+            if len(content) > 300:
+                content = content[:297] + '...'
             self._add_textbox(
                 slide, content,
-                x=Inches(1.1), y=y,
-                w=Inches(11.7), h=Inches(1.5),
-                font_size=17, bold=False,
+                x=Inches(1.2), y=y,
+                w=Inches(11.5), h=Inches(1.3),
+                font_size=16, bold=False,
                 color=t["body_text"],
                 line_spacing=1.4,
             )
-            y = Inches(3.5)
+            y = Inches(3.4)
 
-        # Bullets — 4+ bo'lsa ikki ustunli
+        # Bullets — ikki ustunli
         if bullets:
             if len(bullets) >= 4:
                 mid = (len(bullets) + 1) // 2
                 self._add_bullet_textbox(
                     slide, bullets[:mid],
-                    x=Inches(1.1), y=y,
-                    w=Inches(5.5), h=SLIDE_H - y - Inches(0.5),
+                    x=Inches(1.2), y=y,
+                    w=Inches(5.3), h=SLIDE_H - y - Inches(0.5),
                     font_size=15, color=t["body_text"],
                     bullet_color=t["bullet_accent"],
                 )
                 self._add_bullet_textbox(
                     slide, bullets[mid:],
                     x=Inches(7.0), y=y,
-                    w=Inches(5.5), h=SLIDE_H - y - Inches(0.5),
+                    w=Inches(5.3), h=SLIDE_H - y - Inches(0.5),
                     font_size=15, color=t["body_text"],
                     bullet_color=t["bullet_accent"],
                 )
             else:
                 self._add_bullet_textbox(
                     slide, bullets,
-                    x=Inches(1.1), y=y,
-                    w=Inches(11.7), h=SLIDE_H - y - Inches(0.5),
+                    x=Inches(1.2), y=y,
+                    w=Inches(11.5), h=SLIDE_H - y - Inches(0.5),
                     font_size=16, color=t["body_text"],
                     bullet_color=t["bullet_accent"],
                 )
 
     def _create_image_content_slide(self, data: Dict, image_path: str):
-        """Rasm + kontent layout — chapda rasm, o'ngda matn"""
+        """Rasm + kontent — chapda professional framed rasm, o'ngda content"""
         slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
         t = self.theme
 
         self._set_solid_bg(slide, t["slide_bg"])
 
-        # Title bar
-        self._add_rect(slide, Inches(0), Inches(0),
-                        SLIDE_W, Inches(1.4), t["title_bg"][0])
-        self._add_rect(slide, Inches(0), Inches(1.4),
-                        SLIDE_W, Inches(0.05), t["accent"])
+        # Title bar — gradient
+        self._add_gradient_rect(slide, Inches(0), Inches(0),
+                                SLIDE_W, Inches(1.5),
+                                t["title_bg"][0], t["title_bg"][1])
+        self._add_rect(slide, Inches(0), Inches(1.5),
+                       SLIDE_W, Inches(0.05), t["accent"])
+
+        # Dekor doira title bar ichida
+        self._add_oval(slide, Inches(10.5), Inches(-0.5),
+                       Inches(2.5), Inches(2.5),
+                       t["accent"], alpha=8)
 
         # Title
         title = data.get("title", "")
         self._add_textbox(
             slide, title,
-            x=Inches(0.8), y=Inches(0.28),
-            w=Inches(11.7), h=Inches(0.85),
-            font_size=28, bold=True,
+            x=Inches(1.0), y=Inches(0.25),
+            w=Inches(11.3), h=Inches(0.95),
+            font_size=30, bold=True,
             color=t["title_text"],
             alignment=PP_ALIGN.LEFT,
-            font_name="Calibri Light",
+            font_name=FONT_HEADING,
+            autofit=False,
         )
 
-        # Rasm (chap tomonda, soyali frame ichida)
-        img_frame = self._add_rounded_rect(
+        # Rasm (chap tomonda) — soyali frame
+        self._add_rounded_rect(
             slide,
-            x=Inches(0.5), y=Inches(1.8),
-            w=Inches(5.8), h=Inches(5.1),
+            x=Inches(0.6), y=Inches(1.9),
+            w=Inches(5.6), h=Inches(5.0),
             fill=t["card_bg"],
             border_color=t.get("card_border"),
             shadow=True,
@@ -694,73 +747,285 @@ class ProPPTXGenerator:
         try:
             slide.shapes.add_picture(
                 image_path,
-                left=Inches(0.65), top=Inches(1.95),
-                width=Inches(5.5), height=Inches(4.8),
+                left=Inches(0.75), top=Inches(2.05),
+                width=Inches(5.3), height=Inches(4.7),
             )
         except Exception as e:
             logger.warning(f"Rasm qo'shishda xato: {e}")
 
-        # O'ng tomonda kontent
+        # Rasm ostida accent chiziq
+        self._add_rect(slide, Inches(0.75), Inches(6.85),
+                       Inches(2), Inches(0.04), t["accent"], alpha=40)
+
+        # O'ng tomonda content
         content = data.get("content", "")
         bullets = data.get("bullet_points", [])
-        y = Inches(1.85)
+        y = Inches(1.95)
 
         if content:
+            if len(content) > 250:
+                content = content[:247] + '...'
             self._add_textbox(
                 slide, content,
-                x=Inches(6.7), y=y,
-                w=Inches(6.1), h=Inches(2.0),
+                x=Inches(6.6), y=y,
+                w=Inches(6.2), h=Inches(1.8),
                 font_size=16, bold=False,
                 color=t["body_text"],
                 line_spacing=1.4,
             )
-            y = Inches(4.0)
+            y = Inches(3.9)
 
         if bullets:
             self._add_bullet_textbox(
                 slide, bullets,
-                x=Inches(6.9), y=y,
-                w=Inches(5.9), h=SLIDE_H - y - Inches(0.5),
+                x=Inches(6.8), y=y,
+                w=Inches(6.0), h=SLIDE_H - y - Inches(0.5),
                 font_size=15, color=t["body_text"],
                 bullet_color=t["bullet_accent"],
             )
 
+        # Pastki chiziq
+        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.05),
+                       SLIDE_W, Inches(0.05), t["accent"])
+
+    # ======================== SPLIT SLIDE ========================
+
+    def _create_split_slide(self, data: Dict):
+        """Split layout — 35/65 split, gradient panel chapda, content o'ngda"""
+        slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
+        t = self.theme
+
+        self._set_solid_bg(slide, t["slide_bg"])
+
+        # Chap panel — gradient
+        self._add_gradient_rect(slide, Inches(0), Inches(0),
+                                Inches(4.5), SLIDE_H,
+                                t["title_bg"][0], t["title_bg"][1],
+                                angle=5400000)
+
+        # Accent vertikal chiziq
+        self._add_rect(slide, Inches(4.5), Inches(0),
+                       Inches(0.06), SLIDE_H, t["accent"])
+
+        # Dekor elementlar chap panelda
+        self._add_oval(slide, Inches(-0.8), Inches(5),
+                       Inches(2.5), Inches(2.5),
+                       t["accent"], alpha=10)
+        self._add_oval(slide, Inches(3), Inches(-0.5),
+                       Inches(2), Inches(2),
+                       t["accent2"], alpha=8)
+
+        # Title chap panelda
+        title = data.get("title", "")
+        self._add_textbox(
+            slide, title,
+            x=Inches(0.6), y=Inches(1.2),
+            w=Inches(3.5), h=Inches(2.8),
+            font_size=30, bold=True,
+            color=t["title_text"],
+            alignment=PP_ALIGN.LEFT,
+            font_name=FONT_HEADING,
+            line_spacing=1.15,
+            autofit=False,
+        )
+
+        # Accent chiziq title ostida
+        self._add_rect(slide, Inches(0.6), Inches(4.2),
+                       Inches(1.8), Inches(0.06), t["accent2"])
+        self._add_rect(slide, Inches(0.6), Inches(4.35),
+                       Inches(0.9), Inches(0.04), t["accent"], alpha=40)
+
+        # Dekorativ kichik doira
+        self._add_oval(slide, Inches(0.6), Inches(5.8),
+                       Inches(0.35), Inches(0.35), t["accent2"], alpha=40)
+
+        # O'ng panel — content + bullets
+        content = data.get("content", "")
+        bullets = data.get("bullet_points", [])
+        y = Inches(0.8)
+
+        if content:
+            if len(content) > 300:
+                content = content[:297] + '...'
+            self._add_textbox(
+                slide, content,
+                x=Inches(5.2), y=y,
+                w=Inches(7.5), h=Inches(2.0),
+                font_size=16, bold=False,
+                color=t["body_text"],
+                line_spacing=1.5,
+            )
+            y = Inches(3.0)
+
+        if bullets:
+            self._add_bullet_textbox(
+                slide, bullets,
+                x=Inches(5.4), y=y,
+                w=Inches(7.3), h=SLIDE_H - y - Inches(0.5),
+                font_size=15, color=t["body_text"],
+                bullet_color=t["bullet_accent"],
+            )
+
+    # ======================== HIGHLIGHT SLIDE ========================
+
+    def _create_highlight_slide(self, data: Dict):
+        """Highlight layout — numbered kartalar gridda, professional design"""
+        slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
+        t = self.theme
+
+        self._set_solid_bg(slide, t["slide_bg"])
+
+        # Yuqorida title bar — gradient
+        self._add_gradient_rect(slide, Inches(0), Inches(0),
+                                SLIDE_W, Inches(1.5),
+                                t["title_bg"][0], t["title_bg"][1])
+        self._add_rect(slide, Inches(0), Inches(1.5),
+                       SLIDE_W, Inches(0.05), t["accent"])
+
+        # Dekor
+        self._add_oval(slide, Inches(10.5), Inches(-0.4),
+                       Inches(2.5), Inches(2.5),
+                       t["accent"], alpha=8)
+
+        title = data.get("title", "")
+        self._add_textbox(
+            slide, title,
+            x=Inches(1.0), y=Inches(0.25),
+            w=Inches(11.3), h=Inches(0.95),
+            font_size=30, bold=True,
+            color=t["title_text"],
+            alignment=PP_ALIGN.LEFT,
+            font_name=FONT_HEADING,
+            autofit=False,
+        )
+
+        # Content — agar bo'lsa, quote shaklida
+        content = data.get("content", "")
+        content_end_y = Inches(1.9)
+        if content:
+            if len(content) > 300:
+                content = content[:297] + '...'
+            # Quote accent chiziq
+            self._add_rect(slide, Inches(1.0), Inches(1.85),
+                           Inches(0.07), Inches(1.2), t["accent"])
+            self._add_textbox(
+                slide, content,
+                x=Inches(1.4), y=Inches(1.85),
+                w=Inches(11.0), h=Inches(1.2),
+                font_size=16, bold=False,
+                color=t["body_text"],
+                line_spacing=1.4,
+            )
+            content_end_y = Inches(3.3)
+
+        # Bullets — kartochkalar sifatida
+        bullets = data.get("bullet_points", [])
+        if bullets:
+            bullets = bullets[:4]
+            cols = min(len(bullets), 4)
+            col_w = Inches(2.6)
+            gap = Inches(0.3)
+            total_w = col_w * cols + gap * (cols - 1)
+            start_x = (SLIDE_W - total_w) // 2
+
+            for idx, bullet in enumerate(bullets):
+                col = idx % cols
+                bx = int(start_x) + col * int(col_w + gap)
+                by = content_end_y + Inches(0.2)
+
+                # Karta — elevated
+                self._add_rounded_rect(
+                    slide,
+                    x=bx, y=by,
+                    w=col_w, h=Inches(3.3),
+                    fill=t["card_bg"],
+                    border_color=t.get("card_border"),
+                    shadow=True,
+                )
+
+                # Karta tepasida rangli accent strip
+                self._add_rect(slide, bx, by,
+                               col_w, Inches(0.07), t["accent"])
+
+                # Raqam — accent rangda, katta
+                self._add_textbox(
+                    slide, f"0{idx + 1}",
+                    x=bx + Inches(0.25), y=by + Inches(0.3),
+                    w=Inches(0.7), h=Inches(0.6),
+                    font_size=28, bold=True,
+                    color=t["accent"],
+                    font_name=FONT_HEADING,
+                )
+
+                # Bullet matni
+                clean = bullet.strip()
+                for prefix in ('•', '●', '○', '▪', '▸', '-', '–', '—', '*'):
+                    if clean.startswith(prefix):
+                        clean = clean[len(prefix):].strip()
+                        break
+                if len(clean) > 140:
+                    clean = clean[:137] + '...'
+
+                self._add_textbox(
+                    slide, clean,
+                    x=bx + Inches(0.25), y=by + Inches(1.0),
+                    w=col_w - Inches(0.5), h=Inches(2.0),
+                    font_size=13, bold=False,
+                    color=t["body_text"],
+                    line_spacing=1.35,
+                )
+
+        # Pastki chiziq
+        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.05),
+                       SLIDE_W, Inches(0.05), t["accent"])
+
     # ======================== CONCLUSION SLIDE ========================
 
     def _create_conclusion_slide(self, data: Dict):
-        """Xulosa slayd — gradient bg, markazlashtirilgan"""
+        """Xulosa slayd — dramatic gradient, centered layout"""
         slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
         t = self.theme
 
         # Gradient bg (boshqa yo'nalishda)
         self._set_gradient_bg(slide, t["title_bg"][1], t["title_bg"][0], angle=2700000)
 
+        # Decorativ elementlar
+        self._add_oval(slide, Inches(-1), Inches(-1),
+                       Inches(4), Inches(4),
+                       t["accent"], alpha=6)
+        self._add_oval(slide, Inches(10), Inches(5),
+                       Inches(4), Inches(4),
+                       t["accent2"], alpha=8)
+
         # Yuqori dekorativ chiziq (markazda)
-        bar_w = Inches(4)
+        bar_w = Inches(3.5)
         bar_x = (SLIDE_W - bar_w) // 2
-        self._add_rect(slide, bar_x, Inches(1.8),
-                        bar_w, Inches(0.06), t["accent2"])
+        self._add_rect(slide, bar_x, Inches(1.5),
+                       bar_w, Inches(0.06), t["accent2"])
 
         # Title
         title = data.get("title", "Xulosa")
         self._add_textbox(
             slide, title,
-            x=Inches(1), y=Inches(2.2),
+            x=Inches(1), y=Inches(1.9),
             w=Inches(11.333), h=Inches(1.3),
-            font_size=40, bold=True,
+            font_size=42, bold=True,
             color=t["title_text"],
             alignment=PP_ALIGN.CENTER,
-            font_name="Calibri Light",
+            font_name=FONT_HEADING,
+            autofit=False,
         )
 
         # Content
         content = data.get("content", "")
         if content:
+            if len(content) > 300:
+                content = content[:297] + '...'
             self._add_textbox(
                 slide, content,
-                x=Inches(2), y=Inches(3.8),
-                w=Inches(9.333), h=Inches(1.8),
-                font_size=19, bold=False,
+                x=Inches(2), y=Inches(3.5),
+                w=Inches(9.333), h=Inches(1.5),
+                font_size=18, bold=False,
                 color=t["subtitle_text"],
                 alignment=PP_ALIGN.CENTER,
                 line_spacing=1.5,
@@ -771,47 +1036,52 @@ class ProPPTXGenerator:
         if bullets:
             self._add_bullet_textbox(
                 slide, bullets,
-                x=Inches(3), y=Inches(4.8),
-                w=Inches(7.333), h=Inches(2.0),
+                x=Inches(3), y=Inches(4.6),
+                w=Inches(7.333), h=Inches(2.2),
                 font_size=16, color=t["subtitle_text"],
                 bullet_color=t["accent2"],
                 alignment=PP_ALIGN.CENTER,
             )
 
         # Pastki accent chiziqlar
-        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.12),
-                        SLIDE_W, Inches(0.12), t["accent"])
-        self._add_rect(slide, SLIDE_W - Inches(3.5), SLIDE_H - Inches(0.12),
-                        Inches(3.5), Inches(0.12), t["accent2"])
+        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.15),
+                       SLIDE_W, Inches(0.15), t["accent"])
+        self._add_rect(slide, SLIDE_W - Inches(4), SLIDE_H - Inches(0.15),
+                       Inches(4), Inches(0.15), t["accent2"])
 
     # ======================== AGENDA SLIDE ========================
 
     def _create_agenda_slide(self, slide_titles: List[str]):
-        """Reja/Mundarija slayd — professional numbered list"""
+        """Reja/Mundarija slayd — professional kartali grid"""
         slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
         t = self.theme
 
         self._set_solid_bg(slide, t["slide_bg"])
 
-        # Title bar
-        self._add_rect(slide, Inches(0), Inches(0),
-                        SLIDE_W, Inches(1.5), t["title_bg"][0])
-        self._add_rect(slide, Inches(0), Inches(1.5),
-                        SLIDE_W, Inches(0.06), t["accent"])
+        # Title bar — gradient
+        self._add_gradient_rect(slide, Inches(0), Inches(0),
+                                SLIDE_W, Inches(1.6),
+                                t["title_bg"][0], t["title_bg"][1])
+        self._add_rect(slide, Inches(0), Inches(1.6),
+                       SLIDE_W, Inches(0.05), t["accent"])
+
+        # Dekor
+        self._add_oval(slide, Inches(10.5), Inches(-0.4),
+                       Inches(2.5), Inches(2.5),
+                       t["accent"], alpha=8)
 
         # "Reja" sarlavhasi
         self._add_textbox(
             slide, "Reja",
-            x=Inches(0.8), y=Inches(0.3),
-            w=Inches(11.7), h=Inches(0.9),
+            x=Inches(1.0), y=Inches(0.28),
+            w=Inches(11.3), h=Inches(0.95),
             font_size=32, bold=True,
             color=t["title_text"],
             alignment=PP_ALIGN.LEFT,
-            font_name="Calibri Light",
+            font_name=FONT_HEADING,
+            autofit=False,
         )
 
-        # Slayd sarlavhalarini raqamlangan ro'yxat sifatida ko'rsatish
-        # Birinchi va oxirgisini (kirish/xulosa) olib tashlaymiz agar 7+ bo'lsa
         items = slide_titles[:]
 
         # Ikki ustunli layout (agar 6+ element bo'lsa)
@@ -828,43 +1098,43 @@ class ProPPTXGenerator:
                 for i, item_title in enumerate(col_items):
                     num = i + 1 if col_idx == 0 else mid + i + 1
 
-                    # Raqam doira
-                    circle = self._add_rounded_rect(
+                    # Raqam badge
+                    self._add_rounded_rect(
                         slide,
                         x=col_x, y=y_pos,
-                        w=Inches(0.45), h=Inches(0.45),
+                        w=Inches(0.5), h=Inches(0.5),
                         fill=t["accent"] if (num - 1) % 2 == 0 else t.get("accent2", t["accent"]),
                         shadow=False,
                     )
                     self._add_textbox(
                         slide, str(num),
                         x=col_x, y=y_pos,
-                        w=Inches(0.45), h=Inches(0.45),
-                        font_size=13, bold=True,
+                        w=Inches(0.5), h=Inches(0.5),
+                        font_size=14, bold=True,
                         color=(255, 255, 255),
                         alignment=PP_ALIGN.CENTER,
-                        font_name="Calibri",
+                        font_name=FONT_BODY,
                     )
 
                     # Sarlavha matni
                     self._add_textbox(
                         slide, item_title,
-                        x=col_x + Inches(0.65), y=y_pos + Inches(0.02),
-                        w=Inches(5.2), h=Inches(0.42),
+                        x=col_x + Inches(0.7), y=y_pos + Inches(0.04),
+                        w=Inches(5.0), h=Inches(0.42),
                         font_size=15, bold=False,
                         color=t["body_text"],
                         alignment=PP_ALIGN.LEFT,
-                        font_name="Calibri",
+                        font_name=FONT_BODY,
                     )
 
-                    y_pos += Inches(0.65)
+                    y_pos += Inches(0.68)
         else:
             # Bitta ustunli
-            y_pos = Inches(2.0)
+            y_pos = Inches(2.1)
             for i, item_title in enumerate(items):
                 num = i + 1
 
-                # Raqam doira
+                # Raqam badge
                 self._add_rounded_rect(
                     slide,
                     x=Inches(1.5), y=y_pos,
@@ -879,7 +1149,7 @@ class ProPPTXGenerator:
                     font_size=15, bold=True,
                     color=(255, 255, 255),
                     alignment=PP_ALIGN.CENTER,
-                    font_name="Calibri",
+                    font_name=FONT_BODY,
                 )
 
                 # Sarlavha matni
@@ -890,236 +1160,90 @@ class ProPPTXGenerator:
                     font_size=17, bold=False,
                     color=t["body_text"],
                     alignment=PP_ALIGN.LEFT,
-                    font_name="Calibri",
+                    font_name=FONT_BODY,
                 )
 
-                y_pos += Inches(0.72)
+                y_pos += Inches(0.75)
 
         # Pastki chiziq
-        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.06),
-                        SLIDE_W, Inches(0.06), t["accent"])
-
-    # ======================== SPLIT SLIDE ========================
-
-    def _create_split_slide(self, data: Dict):
-        """Split layout — chap yarmi gradient bg bilan title, o'ng yarmi content"""
-        slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
-        t = self.theme
-
-        self._set_solid_bg(slide, t["slide_bg"])
-
-        # Chap panel — gradient
-        self._add_rect(slide, Inches(0), Inches(0),
-                        Inches(4.8), SLIDE_H, t["title_bg"][0])
-
-        # Accent chiziq — vertikal
-        self._add_rect(slide, Inches(4.8), Inches(0),
-                        Inches(0.06), SLIDE_H, t["accent"])
-
-        # Title chap panelda
-        title = data.get("title", "")
-        self._add_textbox(
-            slide, title,
-            x=Inches(0.6), y=Inches(1.5),
-            w=Inches(3.8), h=Inches(2.5),
-            font_size=30, bold=True,
-            color=t["title_text"],
-            alignment=PP_ALIGN.LEFT,
-            font_name="Calibri Light",
-            line_spacing=1.2,
-        )
-
-        # Accent chiziq title ostida
-        self._add_rect(slide, Inches(0.6), Inches(4.2),
-                        Inches(2), Inches(0.06), t["accent2"])
-
-        # Dekorativ element
-        self._add_rect(slide, Inches(0.6), Inches(6.2),
-                        Inches(0.4), Inches(0.4), t["accent"], alpha=30)
-
-        # O'ng panel — bullets
-        content = data.get("content", "")
-        bullets = data.get("bullet_points", [])
-        y = Inches(0.8)
-
-        if content:
-            self._add_textbox(
-                slide, content,
-                x=Inches(5.5), y=y,
-                w=Inches(7.3), h=Inches(2.2),
-                font_size=17, bold=False,
-                color=t["body_text"],
-                line_spacing=1.4,
-            )
-            y = Inches(3.2)
-
-        if bullets:
-            self._add_bullet_textbox(
-                slide, bullets,
-                x=Inches(5.7), y=y,
-                w=Inches(7.1), h=SLIDE_H - y - Inches(0.5),
-                font_size=15, color=t["body_text"],
-                bullet_color=t["bullet_accent"],
-            )
-
-    # ======================== HIGHLIGHT SLIDE ========================
-
-    def _create_highlight_slide(self, data: Dict):
-        """Highlight layout — katta raqamli kalit faktlar + pastda bullets"""
-        slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
-        t = self.theme
-
-        self._set_solid_bg(slide, t["slide_bg"])
-
-        # Yuqorida title bar
-        self._add_rect(slide, Inches(0), Inches(0),
-                        SLIDE_W, Inches(1.4), t["title_bg"][0])
-        self._add_rect(slide, Inches(0), Inches(1.4),
-                        SLIDE_W, Inches(0.06), t["accent"])
-
-        title = data.get("title", "")
-        self._add_textbox(
-            slide, title,
-            x=Inches(0.8), y=Inches(0.28),
-            w=Inches(11.7), h=Inches(0.85),
-            font_size=28, bold=True,
-            color=t["title_text"],
-            alignment=PP_ALIGN.LEFT,
-            font_name="Calibri Light",
-        )
-
-        # Content — markazda kattaroq
-        content = data.get("content", "")
-        if content:
-            # Content ni katta quote shaklida ko'rsatish
-            self._add_rect(slide, Inches(0.8), Inches(1.8),
-                            Inches(0.08), Inches(1.6), t["accent"])
-            self._add_textbox(
-                slide, content,
-                x=Inches(1.3), y=Inches(1.85),
-                w=Inches(11.2), h=Inches(1.6),
-                font_size=19, bold=False,
-                color=t["body_text"],
-                line_spacing=1.5,
-            )
-
-        # Bullets — 3 ta ustunli kartochkalar sifatida
-        bullets = data.get("bullet_points", [])
-        if bullets:
-            cols = min(3, len(bullets))
-            col_w = Inches(3.5)
-            gap = Inches(0.5)
-            total_w = col_w * cols + gap * (cols - 1)
-            start_x = (SLIDE_W - total_w) // 2
-
-            for idx, bullet in enumerate(bullets[:6]):  # Max 6 ta
-                col = idx % cols
-                row = idx // cols
-                bx = int(start_x) + col * int(col_w + gap)
-                by = Inches(3.9) + row * Inches(1.7)
-
-                # Karta
-                self._add_rounded_rect(
-                    slide,
-                    x=bx, y=by,
-                    w=col_w, h=Inches(1.45),
-                    fill=t["card_bg"],
-                    border_color=t.get("card_border"),
-                    shadow=True,
-                )
-
-                # Raqam
-                self._add_textbox(
-                    slide, str(idx + 1),
-                    x=bx + Inches(0.2), y=by + Inches(0.15),
-                    w=Inches(0.5), h=Inches(0.5),
-                    font_size=22, bold=True,
-                    color=t["accent"],
-                    font_name="Calibri Light",
-                )
-
-                # Bullet matni
-                clean = bullet.strip()
-                for prefix in ('•', '●', '○', '▪', '▸', '-', '–', '—', '*'):
-                    if clean.startswith(prefix):
-                        clean = clean[len(prefix):].strip()
-                        break
-
-                self._add_textbox(
-                    slide, clean,
-                    x=bx + Inches(0.7), y=by + Inches(0.15),
-                    w=col_w - Inches(1.0), h=Inches(1.15),
-                    font_size=13, bold=False,
-                    color=t["body_text"],
-                    line_spacing=1.3,
-                )
-
-        # Pastki chiziq
-        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.06),
-                        SLIDE_W, Inches(0.06), t["accent"])
+        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.05),
+                       SLIDE_W, Inches(0.05), t["accent"])
 
     # ======================== THANK YOU SLIDE ========================
 
     def _create_thank_you_slide(self, title: str):
-        """Yakuniy 'Rahmat' slayd — professional branding"""
+        """Yakuniy 'Rahmat' slayd — dramatic, branded"""
         slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
         t = self.theme
 
         # Gradient bg
         self._set_gradient_bg(slide, t["title_bg"][0], t["title_bg"][1])
 
+        # Katta dekor doiralar
+        self._add_oval(slide, Inches(8.5), Inches(-2),
+                       Inches(6), Inches(6),
+                       t["accent"], alpha=6)
+        self._add_oval(slide, Inches(-1.5), Inches(4),
+                       Inches(4), Inches(4),
+                       t["accent2"], alpha=8)
+        self._add_oval(slide, Inches(10), Inches(5),
+                       Inches(2.5), Inches(2.5),
+                       t["accent2"], alpha=10)
+
         # Yuqori dekorativ chiziq
         bar_w = Inches(3)
         bar_x = (SLIDE_W - bar_w) // 2
-        self._add_rect(slide, bar_x, Inches(2.2),
-                        bar_w, Inches(0.06), t["accent2"])
+        self._add_rect(slide, bar_x, Inches(2.0),
+                       bar_w, Inches(0.06), t["accent2"])
 
         # "E'tiboringiz uchun rahmat!"
         self._add_textbox(
             slide, "E'tiboringiz uchun rahmat!",
-            x=Inches(1), y=Inches(2.6),
+            x=Inches(1), y=Inches(2.5),
             w=Inches(11.333), h=Inches(1.5),
-            font_size=42, bold=True,
+            font_size=46, bold=True,
             color=t["title_text"],
             alignment=PP_ALIGN.CENTER,
-            font_name="Calibri Light",
+            font_name=FONT_HEADING,
+            autofit=False,
         )
 
         # Prezentatsiya nomi
         self._add_textbox(
             slide, title,
-            x=Inches(2), y=Inches(4.3),
+            x=Inches(2), y=Inches(4.2),
             w=Inches(9.333), h=Inches(0.8),
             font_size=18, bold=False,
             color=t["subtitle_text"],
             alignment=PP_ALIGN.CENTER,
+            font_name=FONT_BODY,
         )
 
         # Pastki accent chiziq
-        self._add_rect(slide, bar_x, Inches(5.4),
-                        bar_w, Inches(0.06), t["accent2"])
+        self._add_rect(slide, bar_x, Inches(5.2),
+                       bar_w, Inches(0.06), t["accent2"])
 
-        # Dekorativ elementlar
-        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.12),
-                        SLIDE_W, Inches(0.12), t["accent"])
-        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.12),
-                        Inches(3), Inches(0.12), t["accent2"])
+        # Dekorativ elementlar — pastda
+        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.15),
+                       SLIDE_W, Inches(0.15), t["accent"])
+        self._add_rect(slide, Inches(0), SLIDE_H - Inches(0.15),
+                       Inches(3.5), Inches(0.15), t["accent2"])
 
     # ======================== TEXT HELPERS ========================
 
     def _add_textbox(self, slide, text: str, x, y, w, h,
                      font_size=14, bold=False, color=(0, 0, 0),
                      alignment=PP_ALIGN.LEFT, line_spacing=1.2,
-                     font_name="Calibri"):
-        """Text box qo'shish — multiline, auto-fit"""
+                     font_name=FONT_BODY, autofit=True):
+        """Text box qo'shish — multiline, ixtiyoriy auto-fit"""
         txBox = slide.shapes.add_textbox(x, y, w, h)
         tf = txBox.text_frame
         tf.word_wrap = True
         tf.auto_size = MSO_AUTO_SIZE.NONE
-        tf.margin_left = Inches(0.08)
-        tf.margin_right = Inches(0.08)
-        tf.margin_top = Inches(0.04)
-        tf.margin_bottom = Inches(0.04)
+        tf.margin_left = Inches(0.1)
+        tf.margin_right = Inches(0.1)
+        tf.margin_top = Inches(0.05)
+        tf.margin_bottom = Inches(0.05)
 
         lines = text.split('\n')
         for idx, line in enumerate(lines):
@@ -1139,35 +1263,33 @@ class ProPPTXGenerator:
 
             self._set_line_spacing(p, line_spacing)
 
-        # Shrink text on overflow
-        self._set_text_autofit(txBox)
+        if autofit:
+            self._set_text_autofit(txBox)
         return txBox
 
     def _add_bullet_textbox(self, slide, bullets: List[str], x, y, w, h,
                             font_size=16, color=(0, 0, 0),
                             bullet_color=(0, 0, 0),
                             alignment=PP_ALIGN.LEFT):
-        """Bullet pointlar uchun maxsus text box — har bir bullet alohida paragraf"""
+        """Bullet pointlar — har bir bullet alohida paragraf, ▸ marker"""
         txBox = slide.shapes.add_textbox(x, y, w, h)
         tf = txBox.text_frame
         tf.word_wrap = True
         tf.auto_size = MSO_AUTO_SIZE.NONE
         tf.margin_left = Inches(0.1)
         tf.margin_right = Inches(0.1)
-        tf.margin_top = Inches(0.05)
-        tf.margin_bottom = Inches(0.05)
+        tf.margin_top = Inches(0.06)
+        tf.margin_bottom = Inches(0.06)
 
-        # Maksimum 4 ta bullet, har biri 120 belgigacha
         bullets = bullets[:4]
 
         for idx, bullet in enumerate(bullets):
             bullet = bullet.strip()
             if not bullet:
                 continue
-            if len(bullet) > 120:
-                bullet = bullet[:117] + '...'
+            if len(bullet) > 160:
+                bullet = bullet[:157] + '...'
 
-            # Mavjud bullet belgilarini olib tashlash
             for prefix in ('•', '●', '○', '▪', '▸', '-', '–', '—', '*'):
                 if bullet.startswith(prefix):
                     bullet = bullet[len(prefix):].strip()
@@ -1178,34 +1300,94 @@ class ProPPTXGenerator:
             else:
                 p = tf.add_paragraph()
 
-            # Bullet marker (rangli) + matn
             run_bullet = p.add_run()
             run_bullet.text = "▸  "
             run_bullet.font.size = Pt(font_size)
             run_bullet.font.color.rgb = RGBColor(*bullet_color)
             run_bullet.font.bold = True
-            run_bullet.font.name = "Calibri"
+            run_bullet.font.name = FONT_BODY
 
             run_text = p.add_run()
             run_text.text = bullet
             run_text.font.size = Pt(font_size)
             run_text.font.color.rgb = RGBColor(*color)
-            run_text.font.name = "Calibri"
+            run_text.font.name = FONT_BODY
 
             p.alignment = alignment
-            p.space_after = Pt(8)
-            p.space_before = Pt(4)
+            p.space_after = Pt(10)
+            p.space_before = Pt(5)
 
             self._set_line_spacing(p, 1.3)
 
         self._set_text_autofit(txBox)
         return txBox
 
+    def _add_bullet_cards(self, slide, bullets: List[str], x, y, w, h,
+                          font_size=15, color=(0, 0, 0),
+                          bullet_color=(0, 0, 0),
+                          accent_color=(0, 0, 0)):
+        """Bullet pointlar — har biri mini-karta ichida (standard slide uchun)"""
+        t = self.theme
+        bullets = bullets[:4]
+
+        card_h = Inches(0.75)
+        gap = Inches(0.15)
+
+        for idx, bullet in enumerate(bullets):
+            bullet = bullet.strip()
+            if not bullet:
+                continue
+            if len(bullet) > 120:
+                bullet = bullet[:117] + '...'
+
+            for prefix in ('•', '●', '○', '▪', '▸', '-', '–', '—', '*'):
+                if bullet.startswith(prefix):
+                    bullet = bullet[len(prefix):].strip()
+                    break
+
+            card_y = y + idx * (card_h + gap)
+
+            # Mini karta bg — juda subtle
+            self._add_rounded_rect(
+                slide,
+                x=x, y=card_y,
+                w=w, h=card_h,
+                fill=t["card_bg"],
+                border_color=t.get("card_border"),
+                shadow=False,
+            )
+
+            # Chap accent chiziq
+            self._add_rect(slide, x, card_y,
+                           Inches(0.06), card_h, accent_color)
+
+            # Bullet text
+            self._add_textbox(
+                slide, bullet,
+                x=x + Inches(0.35), y=card_y + Inches(0.08),
+                w=w - Inches(0.5), h=card_h - Inches(0.16),
+                font_size=font_size, bold=False,
+                color=color,
+                line_spacing=1.25,
+            )
+
     # ======================== SHAPE HELPERS ========================
 
     def _add_rect(self, slide, x, y, w, h, fill, alpha=None):
-        """To'rtburchak shape qo'shish"""
+        """To'rtburchak shape"""
         shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, x, y, w, h)
+        shape.fill.solid()
+        shape.fill.fore_color.rgb = RGBColor(*fill)
+        shape.line.fill.background()
+
+        if alpha is not None:
+            self._set_shape_alpha(shape, alpha)
+
+        return shape
+
+    def _add_oval(self, slide, x, y, w, h, fill, alpha=None):
+        """Oval/doira shape — dekorativ element uchun"""
+        shape = slide.shapes.add_shape(MSO_SHAPE.OVAL, x, y, w, h)
         shape.fill.solid()
         shape.fill.fore_color.rgb = RGBColor(*fill)
         shape.line.fill.background()
@@ -1234,6 +1416,45 @@ class ProPPTXGenerator:
 
         return shape
 
+    def _add_gradient_rect(self, slide, x, y, w, h, color1, color2, angle=0):
+        """Gradient to'rtburchak — title bar, panellar uchun"""
+        shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, x, y, w, h)
+        shape.line.fill.background()
+
+        try:
+            spPr = shape._element.find(qn('p:spPr'))
+            if spPr is None:
+                return shape
+
+            # Mavjud fill ni olib tashlash
+            for tag in ['a:solidFill', 'a:gradFill', 'a:noFill']:
+                existing = spPr.find(qn(tag))
+                if existing is not None:
+                    spPr.remove(existing)
+
+            gradFill = etree.SubElement(spPr, qn('a:gradFill'))
+            gsLst = etree.SubElement(gradFill, qn('a:gsLst'))
+
+            gs1 = etree.SubElement(gsLst, qn('a:gs'))
+            gs1.set('pos', '0')
+            srgb1 = etree.SubElement(gs1, qn('a:srgbClr'))
+            srgb1.set('val', '%02X%02X%02X' % color1)
+
+            gs2 = etree.SubElement(gsLst, qn('a:gs'))
+            gs2.set('pos', '100000')
+            srgb2 = etree.SubElement(gs2, qn('a:srgbClr'))
+            srgb2.set('val', '%02X%02X%02X' % color2)
+
+            lin = etree.SubElement(gradFill, qn('a:lin'))
+            lin.set('ang', str(angle))
+            lin.set('scaled', '1')
+        except Exception as e:
+            logger.debug(f"Gradient rect xato: {e}")
+            shape.fill.solid()
+            shape.fill.fore_color.rgb = RGBColor(*color1)
+
+        return shape
+
     # ======================== BACKGROUND HELPERS ========================
 
     def _set_gradient_bg(self, slide, color1, color2, angle=5400000):
@@ -1242,24 +1463,20 @@ class ProPPTXGenerator:
         if cSld is None:
             return
 
-        # Mavjud bg ni olib tashlash
         old_bg = cSld.find(qn('p:bg'))
         if old_bg is not None:
             cSld.remove(old_bg)
 
-        # Yangi bg yaratish va spTree dan OLDIN qo'shish
         bg = etree.Element(qn('p:bg'))
         bgPr = etree.SubElement(bg, qn('p:bgPr'))
         gradFill = etree.SubElement(bgPr, qn('a:gradFill'))
         gsLst = etree.SubElement(gradFill, qn('a:gsLst'))
 
-        # Color stop 1
         gs1 = etree.SubElement(gsLst, qn('a:gs'))
         gs1.set('pos', '0')
         srgb1 = etree.SubElement(gs1, qn('a:srgbClr'))
         srgb1.set('val', '%02X%02X%02X' % color1)
 
-        # Color stop 2
         gs2 = etree.SubElement(gsLst, qn('a:gs'))
         gs2.set('pos', '100000')
         srgb2 = etree.SubElement(gs2, qn('a:srgbClr'))
@@ -1271,7 +1488,6 @@ class ProPPTXGenerator:
 
         etree.SubElement(bgPr, qn('a:effectLst'))
 
-        # bg ni spTree dan oldin qo'shish
         spTree = cSld.find(qn('p:spTree'))
         if spTree is not None:
             cSld.insert(list(cSld).index(spTree), bg)
@@ -1284,12 +1500,10 @@ class ProPPTXGenerator:
         if cSld is None:
             return
 
-        # Mavjud bg ni olib tashlash
         old_bg = cSld.find(qn('p:bg'))
         if old_bg is not None:
             cSld.remove(old_bg)
 
-        # Yangi bg yaratish
         bg = etree.Element(qn('p:bg'))
         bgPr = etree.SubElement(bg, qn('p:bgPr'))
         solidFill = etree.SubElement(bgPr, qn('a:solidFill'))
@@ -1298,7 +1512,6 @@ class ProPPTXGenerator:
 
         etree.SubElement(bgPr, qn('a:effectLst'))
 
-        # bg ni spTree dan oldin qo'shish
         spTree = cSld.find(qn('p:spTree'))
         if spTree is not None:
             cSld.insert(list(cSld).index(spTree), bg)
@@ -1308,7 +1521,7 @@ class ProPPTXGenerator:
     # ======================== XML EFFECTS ========================
 
     def _add_shadow(self, shape):
-        """Shape ga drop shadow (XML orqali)"""
+        """Professional soft shadow — yanada yumshoq va tabiiy"""
         try:
             spPr = shape._element.find(qn('p:spPr'))
             if spPr is None:
@@ -1319,16 +1532,16 @@ class ProPPTXGenerator:
                 effectLst = etree.SubElement(spPr, qn('a:effectLst'))
 
             outerShdw = etree.SubElement(effectLst, qn('a:outerShdw'))
-            outerShdw.set('blurRad', '63500')
-            outerShdw.set('dist', '25400')
-            outerShdw.set('dir', '5400000')
+            outerShdw.set('blurRad', '76200')    # 6pt blur — yumshoqroq
+            outerShdw.set('dist', '30000')       # 2.36pt offset
+            outerShdw.set('dir', '5400000')      # pastga
             outerShdw.set('algn', 'tl')
             outerShdw.set('rotWithShape', '0')
 
             srgbClr = etree.SubElement(outerShdw, qn('a:srgbClr'))
             srgbClr.set('val', '000000')
             alpha = etree.SubElement(srgbClr, qn('a:alpha'))
-            alpha.set('val', '22000')
+            alpha.set('val', '18000')            # 18% — juda subtle
         except Exception as e:
             logger.debug(f"Shadow xato: {e}")
 
@@ -1353,7 +1566,7 @@ class ProPPTXGenerator:
             logger.debug(f"Alpha xato: {e}")
 
     def _set_text_autofit(self, shape):
-        """Matn sig'masa avtomatik kichiklaydigan qilish"""
+        """Matn sig'masa avtomatik kichiklaydigan qilish — yumshoq, 90% gacha"""
         try:
             txBody = shape._element.find(qn('p:txBody'))
             if txBody is None:
@@ -1372,19 +1585,20 @@ class ProPPTXGenerator:
                     bodyPr.remove(existing)
 
             normAutofit = etree.SubElement(bodyPr, qn('a:normAutofit'))
-            normAutofit.set('fontScale', '62500')
-            normAutofit.set('lnSpcReduction', '20000')
+            # 90% — shrift max 10% kichrayadi (16pt -> min 14.4pt)
+            normAutofit.set('fontScale', '90000')
+            # 10% — qator oralig'i oz kichrayadi
+            normAutofit.set('lnSpcReduction', '10000')
         except Exception as e:
             logger.debug(f"Autofit xato: {e}")
 
     def _set_line_spacing(self, paragraph, multiplier: float):
-        """Paragrafga qator oralig'i qo'yish"""
+        """Paragrafga qator oralig'i"""
         try:
             pPr = paragraph._element.find(qn('a:pPr'))
             if pPr is None:
                 pPr = etree.SubElement(paragraph._element, qn('a:pPr'))
 
-            # Mavjud lnSpc ni olib tashlash
             existing = pPr.find(qn('a:lnSpc'))
             if existing is not None:
                 pPr.remove(existing)
@@ -1398,21 +1612,17 @@ class ProPPTXGenerator:
     # ======================== SLIDE NUMBERS ========================
 
     def _add_slide_numbers(self, total_slides: int):
-        """Barcha slaydlarga raqam qo'shish (title va thank you slayddan tashqari)"""
         t = self.theme
-        is_dark = self._is_dark_theme()
         last_idx = len(self.prs.slides) - 1
 
         for idx, slide in enumerate(self.prs.slides):
             if idx == 0 or idx == last_idx:
-                continue  # Title va Thank You slaydlarga raqam qo'yilmaydi
+                continue
 
             num_text = f"{idx}/{total_slides - 2}"
-            # Conclusion slayd uchun subtitle_text, boshqalar uchun body_text
             is_conclusion = idx == last_idx - 1
-            num_color = t["subtitle_text"] if is_conclusion else t.get("body_text", (100, 100, 100))
+            num_color = t["subtitle_text"] if is_conclusion else t.get("muted", t.get("body_text", (100, 100, 100)))
 
-            # Pastki o'ng burchakda kichik raqam
             txBox = slide.shapes.add_textbox(
                 SLIDE_W - Inches(1.2), SLIDE_H - Inches(0.45),
                 Inches(0.9), Inches(0.3)
@@ -1423,23 +1633,20 @@ class ProPPTXGenerator:
             p.text = num_text
             p.font.size = Pt(9)
             p.font.color.rgb = RGBColor(*num_color)
-            p.font.name = "Calibri"
+            p.font.name = FONT_BODY
             p.alignment = PP_ALIGN.RIGHT
 
     def _is_dark_theme(self):
-        """Tema qorong'i ekanligini aniqlash"""
         bg = self.theme.get("slide_bg", (255, 255, 255))
-        return sum(bg) < 384  # O'rtacha 128 dan past = qorong'i
+        return sum(bg) < 384
 
     # ======================== IMAGE FETCHING ========================
 
     async def _fetch_images(self, content: Dict, api_key: str = None) -> Dict[int, str]:
-        """Rasmlar yuklab olish — Pixabay (asosiy) + Picsum (fallback)"""
         images = {}
         slides = content.get("slides", [])
 
         timeout = aiohttp.ClientTimeout(total=45)
-        # SSL sozlamasi — ba'zi serverlarda sertifikat muammosi bo'lishi mumkin
         try:
             import ssl
             import certifi
@@ -1467,7 +1674,6 @@ class ProPPTXGenerator:
 
     async def _fetch_slide_image(self, session, api_key: str,
                                   slide_idx: int, keywords: Dict) -> Tuple[int, Optional[str]]:
-        """Bitta slayd uchun rasm yuklab olish — Pixabay (asosiy) + Picsum (fallback)"""
         import urllib.parse
 
         for key_type in ["primary", "secondary", "fallback"]:
@@ -1475,13 +1681,11 @@ class ProPPTXGenerator:
             if not keyword:
                 continue
 
-            # 1. Pixabay — asosiy (mavzuga mos, professional)
             if api_key:
                 img_path = await self._download_pixabay_image(session, api_key, keyword)
                 if img_path:
                     return (slide_idx, img_path)
 
-            # 2. Picsum — fallback (har doim ishlaydi, lekin random)
             img_path = await self._download_picsum_image(session, keyword)
             if img_path:
                 return (slide_idx, img_path)
@@ -1490,7 +1694,6 @@ class ProPPTXGenerator:
 
     async def _download_pixabay_image(self, session, api_key: str,
                                        keyword: str) -> Optional[str]:
-        """Pixabay API dan professional rasm yuklab olish"""
         try:
             import urllib.parse
             encoded_kw = urllib.parse.quote(keyword)
@@ -1514,7 +1717,6 @@ class ProPPTXGenerator:
             if not hits:
                 return None
 
-            # Eng katta o'lchamli rasmni tanlash (largeImageURL > webformatURL)
             hit = hits[0]
             img_url = hit.get("largeImageURL") or hit.get("webformatURL", "")
             if not img_url:
@@ -1539,7 +1741,6 @@ class ProPPTXGenerator:
             return None
 
     async def _download_picsum_image(self, session, keyword: str) -> Optional[str]:
-        """Lorem Picsum dan rasm yuklab olish (fallback — har doim ishlaydi)"""
         try:
             import urllib.parse
             import random
@@ -1573,7 +1774,6 @@ class ProPPTXGenerator:
 # =====================================================================
 
 def get_available_themes() -> List[Dict]:
-    """Mavjud temalar ro'yxati"""
     result = []
     for theme_id, theme_name in THEME_ID_MAP.items():
         theme = THEMES.get(theme_name, {})
@@ -1586,7 +1786,6 @@ def get_available_themes() -> List[Dict]:
 
 
 def resolve_theme_id(theme_id: str) -> str:
-    """Bot theme ID ni generator theme nomiga aylantirish"""
     if not theme_id:
         return DEFAULT_THEME
     return THEME_ID_MAP.get(theme_id.lower(), DEFAULT_THEME)

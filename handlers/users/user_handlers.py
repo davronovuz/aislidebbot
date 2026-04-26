@@ -44,6 +44,10 @@ class BalanceStates(StatesGroup):
     waiting_for_receipt = State()
 
 
+class SubscriptionStates(StatesGroup):
+    waiting_for_receipt = State()
+
+
 # ==================== SAVOLLAR ====================
 PITCH_QUESTIONS = [
     "1️⃣ Ismingiz va lavozimingiz?",
@@ -896,12 +900,25 @@ async def balance_info(message: types.Message, state: FSMContext):
         transactions = user_db.get_user_transactions(telegram_id, limit=5)
         free_left = user_db.get_free_presentations(telegram_id)
 
+        # Obuna ma'lumoti
+        sub = user_db.get_user_subscription(telegram_id)
+        sub_text = ""
+        if sub:
+            if sub['max_presentations'] >= 999:
+                pres_text = "♾ Cheksiz"
+            else:
+                remaining = sub['max_presentations'] - sub['presentations_used']
+                pres_text = f"{remaining} ta qoldi"
+            sub_text = f"\n⭐ Obuna: <b>{sub['display_name']}</b>\n📊 Prezentatsiya: {pres_text}\n📅 Tugash: {sub['expires_at'][:10]}\n"
+        else:
+            sub_text = "\n⭐ Obuna: <b>Yo'q</b> — ⭐ Obuna tugmasini bosing\n"
+
         info_text = f"""
 💰 <b>BALANSINGIZ</b>
 
 💳 Hozirgi balans: <b>{stats['balance']:,.0f} so'm</b>
 🎁 Bepul prezentatsiya: <b>{free_left} ta</b>
-
+{sub_text}
 📊 <b>Statistika:</b>
 📈 Jami to'ldirilgan: {stats['total_deposited']:,.0f} so'm
 📉 Jami sarflangan: {stats['total_spent']:,.0f} so'm
@@ -1087,9 +1104,24 @@ async def prices_handler(message: types.Message):
         page_price = user_db.get_price('page_basic') or 500
         balance = user_db.get_user_balance(telegram_id)
 
+        # Obuna holati
+        sub = user_db.get_user_subscription(telegram_id)
+
         price_text = "💰 <b>Narxlar</b>\n\n"
 
-        price_text += "📊 <b>Prezentatsiya</b>\n"
+        # Obuna rejalari
+        price_text += "⭐ <b>Obuna rejalari</b>\n"
+        plans = user_db.get_subscription_plans()
+        for plan in plans:
+            if plan['price'] == 0:
+                continue
+            is_current = sub and sub['plan_name'] == plan['name']
+            marker = " ✅" if is_current else ""
+            pres = "♾" if plan['max_presentations'] >= 999 else str(plan['max_presentations'])
+            price_text += f"   {'🚀' if plan['name'] == 'start' else '👑'} {plan['display_name']}{marker}: <b>{plan['price']:,.0f} so'm/oy</b> — {pres} prezentatsiya\n"
+        price_text += "\n"
+
+        price_text += "📊 <b>Slayd narxi (obunasiz)</b>\n"
         price_text += f"   • 1 slayd = <b>{slide_price:,.0f} so'm</b>\n"
         price_text += f"   • 10 slayd = <b>{slide_price * 10:,.0f} so'm</b>\n"
         price_text += f"   • 15 slayd = <b>{slide_price * 15:,.0f} so'm</b>\n\n"
@@ -1099,11 +1131,17 @@ async def prices_handler(message: types.Message):
         price_text += f"   • 12 sahifa = <b>{page_price * 12:,.0f} so'm</b>\n"
         price_text += f"   • 25 sahifa = <b>{page_price * 25:,.0f} so'm</b>\n\n"
 
-        if free_left > 0:
-            price_text += f"🎁 Sizda <b>{free_left} ta BEPUL</b> prezentatsiya bor!\n\n"
+        if sub:
+            remaining = sub['max_presentations'] - sub['presentations_used']
+            if sub['max_presentations'] >= 999:
+                price_text += f"⭐ Obunangiz: <b>{sub['display_name']}</b> — ♾ Cheksiz\n"
+            else:
+                price_text += f"⭐ Obunangiz: <b>{sub['display_name']}</b> — {remaining} ta qoldi\n"
+        elif free_left > 0:
+            price_text += f"🎁 Sizda <b>{free_left} ta BEPUL</b> prezentatsiya bor!\n"
 
-        price_text += f"💳 Balansingiz: <b>{balance:,.0f} so'm</b>\n"
-        price_text += "To'ldirish uchun <b>\"💳 To'ldirish\"</b> tugmasini bosing."
+        price_text += f"\n💳 Balansingiz: <b>{balance:,.0f} so'm</b>\n"
+        price_text += "⭐ Obuna uchun <b>\"⭐ Obuna\"</b> tugmasini bosing."
 
         await message.answer(price_text, parse_mode='HTML')
 
@@ -1128,3 +1166,287 @@ async def help_handler(message: types.Message):
 ❓ Savol yoki muammo: @dostonbek_musurmonov"""
 
     await message.answer(help_text, parse_mode='HTML')
+
+
+# ==================== OBUNA ====================
+@dp.message_handler(Text(equals="⭐ Obuna"), state='*')
+async def subscription_handler(message: types.Message, state: FSMContext):
+    """Obuna menyu — hozirgi obuna + rejalar"""
+    current_state = await state.get_state()
+    if current_state:
+        await state.finish()
+
+    telegram_id = message.from_user.id
+    sub = user_db.get_user_subscription(telegram_id)
+    plans = user_db.get_subscription_plans()
+    balance = user_db.get_user_balance(telegram_id)
+
+    text = "⭐ <b>OBUNA REJALARI</b>\n\n"
+
+    # Hozirgi obuna holati
+    if sub:
+        remaining_pres = sub['max_presentations'] - sub['presentations_used']
+        remaining_cw = sub['max_courseworks'] - sub['courseworks_used']
+        if sub['max_presentations'] >= 999:
+            remaining_pres_text = "♾ Cheksiz"
+        else:
+            remaining_pres_text = f"{remaining_pres} ta qoldi"
+        if sub['max_courseworks'] >= 999:
+            remaining_cw_text = "♾ Cheksiz"
+        else:
+            remaining_cw_text = f"{remaining_cw} ta qoldi"
+
+        text += f"📌 <b>Hozirgi rejangiz: {sub['display_name']}</b>\n"
+        text += f"📊 Prezentatsiya: {remaining_pres_text}\n"
+        text += f"📝 Mustaqil ish: {remaining_cw_text}\n"
+        text += f"📅 Amal qilish: {sub['expires_at'][:10]}\n\n"
+        text += "━━━━━━━━━━━━━━━━━━━━━\n\n"
+    else:
+        text += "📌 Sizda hozir aktiv obuna yo'q\n"
+        text += "Tanlang va imkoniyatlardan foydalaning!\n\n"
+        text += "━━━━━━━━━━━━━━━━━━━━━\n\n"
+
+    # Rejalar ro'yxati
+    for plan in plans:
+        is_current = sub and sub['plan_name'] == plan['name']
+        marker = " ✅" if is_current else ""
+
+        if plan['max_presentations'] >= 999:
+            pres_text = "♾ Cheksiz"
+        else:
+            pres_text = f"{plan['max_presentations']} ta"
+        if plan['max_courseworks'] >= 999:
+            cw_text = "♾ Cheksiz"
+        else:
+            cw_text = f"{plan['max_courseworks']} ta"
+
+        if plan['price'] == 0:
+            price_text = "Bepul"
+        else:
+            price_text = f"{plan['price']:,.0f} so'm/oy"
+
+        text += f"{'🆓' if plan['name'] == 'free' else '🚀' if plan['name'] == 'start' else '👑'} <b>{plan['display_name']}{marker}</b> — {price_text}\n"
+        text += f"   📊 Prezentatsiya: {pres_text}\n"
+        text += f"   📝 Mustaqil ish: {cw_text}\n"
+        text += f"   📑 Max slaydlar: {plan['max_slides']} ta\n\n"
+
+    text += f"💳 Balansingiz: <b>{balance:,.0f} so'm</b>\n\n"
+    text += "Obuna sotib olish uchun pastdagi tugmani bosing 👇"
+
+    # Inline tugmalar
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    for plan in plans:
+        if plan['price'] > 0:
+            is_current = sub and sub['plan_name'] == plan['name']
+            if is_current:
+                btn_text = f"✅ {plan['display_name']} — hozirgi"
+                keyboard.add(InlineKeyboardButton(btn_text, callback_data=f"sub_info:{plan['name']}"))
+            else:
+                btn_text = f"{'🚀' if plan['name'] == 'start' else '👑'} {plan['display_name']} — {plan['price']:,.0f} so'm"
+                keyboard.add(InlineKeyboardButton(btn_text, callback_data=f"sub_buy:{plan['name']}"))
+
+    await message.answer(text, reply_markup=keyboard, parse_mode='HTML')
+
+
+@dp.callback_query_handler(lambda c: c.data.startswith("sub_buy:"), state='*')
+async def subscription_buy_handler(callback: types.CallbackQuery, state: FSMContext):
+    """Obuna sotib olish — to'g'ridan-to'g'ri to'lov"""
+    plan_name = callback.data.split(":")[1]
+    telegram_id = callback.from_user.id
+    plan = user_db.get_plan(plan_name)
+
+    if not plan:
+        await callback.answer("❌ Reja topilmadi!", show_alert=True)
+        return
+
+    if plan['max_presentations'] >= 999:
+        pres_text = "♾ Cheksiz"
+    else:
+        pres_text = f"{plan['max_presentations']} ta"
+    if plan['max_courseworks'] >= 999:
+        cw_text = "♾ Cheksiz"
+    else:
+        cw_text = f"{plan['max_courseworks']} ta"
+
+    CARD_NUMBER = "9860080147802732"
+    CARD_HOLDER = "G'olibjon  Davronov"
+
+    text = f"""
+⭐ <b>OBUNA SOTIB OLISH</b>
+
+📦 Reja: <b>{plan['display_name']}</b>
+💰 Narx: <b>{plan['price']:,.0f} so'm/oy</b>
+📊 Prezentatsiya: {pres_text}
+📝 Mustaqil ish: {cw_text}
+📑 Max slaydlar: {plan['max_slides']} ta
+📅 Muddat: {plan['duration_days']} kun
+
+━━━━━━━━━━━━━━━━━━━━━
+
+💳 <b>TO'LOV MA'LUMOTLARI</b>
+
+📇 <b>Karta raqami:</b>
+<code>{CARD_NUMBER}</code>
+
+👤 <b>Karta egasi:</b>
+{CARD_HOLDER}
+
+💰 <b>To'lov summasi:</b> {plan['price']:,.0f} so'm
+
+━━━━━━━━━━━━━━━━━━━━━
+
+📸 <b>To'lov qilgandan keyin:</b>
+Chek (skrinshot yoki PDF) ni shu chatga yuboring!
+
+⏳ Admin tasdiqlashi bilan obuna avtomatik aktivlashadi!
+"""
+
+    await callback.message.edit_text(text, parse_mode='HTML')
+    await callback.answer()
+
+    # FSM ga plan_name saqlash va chek kutish holatiga o'tkazish
+    await state.update_data(sub_plan_name=plan_name)
+    await SubscriptionStates.waiting_for_receipt.set()
+
+
+# ==================== OBUNA CHEK QABUL QILISH ====================
+@dp.message_handler(content_types=['photo', 'document'], state=SubscriptionStates.waiting_for_receipt)
+async def subscription_receipt_handler(message: types.Message, state: FSMContext):
+    """Obuna uchun chek qabul qilish"""
+    telegram_id = message.from_user.id
+    user_data = await state.get_data()
+    plan_name = user_data.get('sub_plan_name')
+
+    plan = user_db.get_plan(plan_name)
+    if not plan:
+        await message.answer("❌ Reja topilmadi! Qaytadan urinib ko'ring.", reply_markup=_kb(message))
+        await state.finish()
+        return
+
+    try:
+        if message.content_type == 'photo':
+            file_id = message.photo[-1].file_id
+        else:
+            file_id = message.document.file_id
+
+        logger.info(f"📥 Obuna chek qabul qilindi: User {telegram_id}, Plan {plan_name}")
+
+        # Tranzaksiya yaratish — subscription turi bilan
+        trans_id = user_db.create_transaction(
+            telegram_id=telegram_id,
+            transaction_type='subscription',
+            amount=plan['price'],
+            description=f"Obuna: {plan['display_name']}|{plan_name}",
+            receipt_file_id=file_id,
+            status='pending'
+        )
+
+        if not trans_id:
+            await message.answer("❌ Tranzaksiya yaratishda xatolik!", reply_markup=_kb(message))
+            await state.finish()
+            return
+
+        success_text = f"""
+✅ <b>Chek qabul qilindi!</b>
+
+⭐ Obuna: <b>{plan['display_name']}</b>
+💰 Summa: {plan['price']:,.0f} so'm
+🆔 Tranzaksiya ID: {trans_id}
+
+⏳ Admin 5-30 daqiqada tasdiqlaydi.
+Tasdiqlangach obuna avtomatik aktivlashadi! 🎉
+"""
+
+        await message.answer(success_text, reply_markup=_kb(message), parse_mode='HTML')
+
+        # Admin'larga maxsus obuna xabarnomasi
+        user_name = message.from_user.full_name
+        await send_subscription_admin_notification(trans_id, telegram_id, plan, file_id, user_name)
+
+        logger.info(f"✅ Obuna so'rovi yaratildi: Trans {trans_id}, User {telegram_id}, Plan {plan_name}")
+
+        await state.finish()
+
+    except Exception as e:
+        logger.error(f"❌ Subscription receipt xato: {e}")
+        await message.answer("❌ Xatolik yuz berdi!", reply_markup=_kb(message), parse_mode='HTML')
+        await state.finish()
+
+
+@dp.message_handler(state=SubscriptionStates.waiting_for_receipt)
+async def subscription_receipt_text_handler(message: types.Message, state: FSMContext):
+    """Obuna chek o'rniga text kelganda"""
+    if message.text == "❌ Bekor qilish":
+        await state.finish()
+        await message.answer("❌ Bekor qilindi", reply_markup=_kb(message))
+        return
+
+    await message.answer("📸 Iltimos, chek <b>rasm</b> yoki <b>fayl</b> sifatida yuboring!", parse_mode='HTML')
+
+
+async def send_subscription_admin_notification(trans_id: int, user_id: int, plan: dict, file_id: str, user_name: str):
+    """Admin'larga obuna tranzaksiyasi haqida xabar yuborish"""
+    try:
+        keyboard = InlineKeyboardMarkup(row_width=2)
+        keyboard.add(
+            InlineKeyboardButton("✅ Tasdiqlash", callback_data=f"approve_trans:{trans_id}"),
+            InlineKeyboardButton("❌ Rad etish", callback_data=f"reject_trans:{trans_id}")
+        )
+
+        user_info = f"""
+🔔 <b>YANGI OBUNA SO'ROVI</b>
+
+👤 <b>User:</b> {user_name}
+🆔 <b>User ID:</b> <code>{user_id}</code>
+⭐ <b>Obuna:</b> {plan['display_name']}
+💰 <b>Summa:</b> {plan['price']:,.0f} so'm
+📅 <b>Muddat:</b> {plan['duration_days']} kun
+🆔 <b>Tranzaksiya ID:</b> {trans_id}
+
+✅ Tasdiqlangach obuna avtomatik aktivlashadi!
+
+📸 Chek quyida 👇
+"""
+
+        for admin_id in ADMINS:
+            try:
+                await bot.send_message(admin_id, user_info, reply_markup=keyboard, parse_mode='HTML')
+                try:
+                    await bot.send_photo(admin_id, file_id)
+                except:
+                    await bot.send_document(admin_id, file_id)
+                logger.info(f"✅ Obuna notification yuborildi: Admin {admin_id}, Trans {trans_id}")
+            except Exception as e:
+                logger.error(f"❌ Admin {admin_id} ga xabar yuborishda xato: {e}")
+
+    except Exception as e:
+        logger.error(f"💥 Subscription admin notification xatosi: {e}")
+
+
+@dp.callback_query_handler(lambda c: c.data == "sub_cancel", state='*')
+async def subscription_cancel_handler(callback: types.CallbackQuery):
+    await callback.message.edit_text("❌ Bekor qilindi.")
+    await callback.answer()
+
+
+@dp.callback_query_handler(lambda c: c.data.startswith("sub_info:"), state='*')
+async def subscription_info_handler(callback: types.CallbackQuery):
+    """Hozirgi obuna haqida ma'lumot"""
+    telegram_id = callback.from_user.id
+    sub = user_db.get_user_subscription(telegram_id)
+    if sub:
+        if sub['max_presentations'] >= 999:
+            pres_text = "♾ Cheksiz"
+        else:
+            pres_text = f"{sub['presentations_used']}/{sub['max_presentations']}"
+        if sub['max_courseworks'] >= 999:
+            cw_text = "♾ Cheksiz"
+        else:
+            cw_text = f"{sub['courseworks_used']}/{sub['max_courseworks']}"
+
+        await callback.answer(
+            f"📦 {sub['display_name']}\n📊 Prezentatsiya: {pres_text}\n📝 Mustaqil ish: {cw_text}\n📅 Tugash: {sub['expires_at'][:10]}",
+            show_alert=True
+        )
+    else:
+        await callback.answer("Aktiv obuna yo'q", show_alert=True)

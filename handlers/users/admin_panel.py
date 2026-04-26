@@ -29,6 +29,13 @@ class AdminStates(StatesGroup):
     AddBalanceToUser = State()
     AddBalanceAmount = State()
 
+    # Obuna boshqaruvi
+    SubSelectPlan = State()
+    SubEditField = State()
+    SubEditValue = State()
+    SubActivateUser = State()
+    SubActivatePlan = State()
+
 
 # ==================== PERMISSION CHECK ====================
 async def check_super_admin_permission(telegram_id: int) -> bool:
@@ -447,7 +454,7 @@ Tasdiqlaysizmi?
 
 @dp.callback_query_handler(lambda c: c.data.startswith('approve_trans:'))
 async def approve_transaction_callback(callback: types.CallbackQuery):
-    """Tranzaksiyani tasdiqlash"""
+    """Tranzaksiyani tasdiqlash — obuna bo'lsa avtomatik aktivlashtirish"""
     try:
         transaction_id = int(callback.data.split(':')[1])
         admin_telegram_id = callback.from_user.id
@@ -464,15 +471,106 @@ async def approve_transaction_callback(callback: types.CallbackQuery):
             await callback.answer(f"⚠️ Bu tranzaksiya allaqachon {trans['status']}!", show_alert=True)
             return
 
-        # Tranzaksiyani tasdiqlash
-        success = user_db.approve_transaction(transaction_id, admin_telegram_id)
+        # Obuna tranzaksiyasimi tekshirish
+        is_subscription = trans.get('type') == 'subscription' or (
+            trans.get('description', '') and 'Obuna:' in trans.get('description', '')
+        )
 
-        if not success:
-            await callback.answer("❌ Xatolik yuz berdi!", show_alert=True)
-            return
+        if is_subscription:
+            # ===== OBUNA TRANZAKSIYASI =====
+            # Description'dan plan_name ni ajratib olish: "Obuna: Start|start"
+            plan_name = None
+            description = trans.get('description', '')
+            if '|' in description:
+                plan_name = description.split('|')[-1].strip()
+            elif 'Obuna:' in description:
+                # Fallback: display_name dan plan_name topish
+                plans = user_db.get_subscription_plans()
+                for plan in plans:
+                    if plan['display_name'] in description:
+                        plan_name = plan['name']
+                        break
 
-        # ✅ TO'G'IRLANGAN: text yoki caption tekshirish
-        new_text = f"""
+            if not plan_name:
+                await callback.answer("❌ Obuna rejasi topilmadi!", show_alert=True)
+                return
+
+            plan = user_db.get_plan(plan_name)
+            if not plan:
+                await callback.answer(f"❌ '{plan_name}' rejasi topilmadi!", show_alert=True)
+                return
+
+            # Tranzaksiyani tasdiqlash (balansga qo'shilmaydi)
+            user_db.execute(
+                "UPDATE Transactions SET status = 'approved', approved_by = ?, approved_at = datetime('now') WHERE id = ?",
+                (admin_telegram_id, transaction_id),
+                commit=True
+            )
+
+            # Obunani aktivlashtirish
+            activated = user_db.activate_subscription(trans['telegram_id'], plan_name)
+
+            if not activated:
+                await callback.answer("❌ Obunani aktivlashtirishda xatolik!", show_alert=True)
+                return
+
+            new_text = f"""
+✅ <b>OBUNA TASDIQLANDI!</b>
+
+🆔 Tranzaksiya: {transaction_id}
+👤 User ID: {trans['telegram_id']}
+⭐ Obuna: {plan['display_name']}
+💰 Summa: {trans['amount']:,.0f} so'm
+👨‍💼 Tasdiqlagan: {admin_name}
+
+✅ Obuna avtomatik aktivlashtirildi!
+"""
+
+            # Xabarni yangilash
+            try:
+                if callback.message.caption:
+                    await callback.message.edit_caption(caption=new_text, parse_mode='HTML')
+                else:
+                    await callback.message.edit_text(text=new_text, parse_mode='HTML')
+            except Exception:
+                await callback.message.answer(new_text, parse_mode='HTML')
+
+            await callback.answer("✅ Obuna aktivlashtirildi!", show_alert=True)
+
+            # Userga xabar yuborish
+            try:
+                sub = user_db.get_user_subscription(trans['telegram_id'])
+                if sub and sub['max_presentations'] >= 999:
+                    pres_text = "♾ Cheksiz"
+                else:
+                    pres_text = f"{plan['max_presentations']} ta"
+
+                user_text = f"""
+🎉 <b>OBUNA AKTIVLASHTIRILDI!</b>
+
+⭐ Reja: <b>{plan['display_name']}</b>
+📊 Prezentatsiya: {pres_text}
+📑 Max slaydlar: {plan['max_slides']} ta
+📅 Muddat: {plan['duration_days']} kun
+
+Endi prezentatsiya yarating va imkoniyatlardan foydalaning! 🎉
+"""
+                await bot.send_message(trans['telegram_id'], user_text, parse_mode='HTML')
+            except Exception as e:
+                logger.error(f"User subscription notification xatosi: {e}")
+
+            logger.info(f"⭐ Obuna tasdiqlandi: Trans {transaction_id}, User {trans['telegram_id']}, Plan {plan_name}")
+
+        else:
+            # ===== ODDIY BALANS TO'LDIRISH TRANZAKSIYASI =====
+            # Tranzaksiyani tasdiqlash (balansga qo'shiladi)
+            success = user_db.approve_transaction(transaction_id, admin_telegram_id)
+
+            if not success:
+                await callback.answer("❌ Xatolik yuz berdi!", show_alert=True)
+                return
+
+            new_text = f"""
 ✅ <b>TASDIQLANDI!</b>
 
 🆔 Tranzaksiya: {transaction_id}
@@ -481,22 +579,21 @@ async def approve_transaction_callback(callback: types.CallbackQuery):
 👨‍💼 Tasdiqlagan: {admin_name}
 """
 
-        # Xabarni yangilash - caption yoki text
-        try:
-            if callback.message.caption:
-                await callback.message.edit_caption(caption=new_text, parse_mode='HTML')
-            else:
-                await callback.message.edit_text(text=new_text, parse_mode='HTML')
-        except Exception as e:
-            # Agar edit qilib bo'lmasa, yangi xabar yuborish
-            await callback.message.answer(new_text, parse_mode='HTML')
+            # Xabarni yangilash
+            try:
+                if callback.message.caption:
+                    await callback.message.edit_caption(caption=new_text, parse_mode='HTML')
+                else:
+                    await callback.message.edit_text(text=new_text, parse_mode='HTML')
+            except Exception:
+                await callback.message.answer(new_text, parse_mode='HTML')
 
-        await callback.answer("✅ Tranzaksiya tasdiqlandi!")
+            await callback.answer("✅ Tranzaksiya tasdiqlandi!")
 
-        # Userga xabar yuborish
-        try:
-            new_balance = user_db.get_user_balance(trans['telegram_id'])
-            user_text = f"""
+            # Userga xabar yuborish
+            try:
+                new_balance = user_db.get_user_balance(trans['telegram_id'])
+                user_text = f"""
 ✅ <b>TO'LOV TASDIQLANDI!</b>
 
 💰 Summa: <b>{trans['amount']:,.0f} so'm</b>
@@ -507,11 +604,11 @@ async def approve_transaction_callback(callback: types.CallbackQuery):
 
 Xizmatlarimizdan foydalanishingiz mumkin! 🎉
 """
-            await bot.send_message(trans['telegram_id'], user_text, parse_mode='HTML')
-        except Exception as e:
-            logger.error(f"User notification xatosi: {e}")
+                await bot.send_message(trans['telegram_id'], user_text, parse_mode='HTML')
+            except Exception as e:
+                logger.error(f"User notification xatosi: {e}")
 
-        logger.info(f"✅ Trans {transaction_id} tasdiqlandi by Admin {admin_telegram_id}")
+            logger.info(f"✅ Trans {transaction_id} tasdiqlandi by Admin {admin_telegram_id}")
 
     except Exception as e:
         logger.error(f"❌ Approve callback xato: {e}")
@@ -1143,6 +1240,159 @@ async def finance_report(message: types.Message):
 """
 
     await message.answer(finance_text)
+
+
+# ==================== OBUNA BOSHQARUVI ====================
+
+@dp.message_handler(Text(equals="⭐ Obuna boshqarish"))
+async def admin_subscription_menu(message: types.Message):
+    """Admin — obuna rejalarini boshqarish"""
+    telegram_id = message.from_user.id
+    if not await check_super_admin_permission(telegram_id):
+        await message.reply("❌ Faqat super adminlar!")
+        return
+
+    plans = user_db.get_subscription_plans()
+
+    text = "⭐ <b>OBUNA BOSHQARUVI</b>\n\n"
+    for plan in plans:
+        pres = "♾" if plan['max_presentations'] >= 999 else str(plan['max_presentations'])
+        cw = "♾" if plan['max_courseworks'] >= 999 else str(plan['max_courseworks'])
+        text += f"📦 <b>{plan['display_name']}</b> (<code>{plan['name']}</code>)\n"
+        text += f"   💰 Narx: {plan['price']:,.0f} so'm\n"
+        text += f"   📊 Prezentatsiya: {pres} ta | 📝 MI: {cw} ta\n"
+        text += f"   📑 Max slayd: {plan['max_slides']} ta\n\n"
+
+    text += "━━━━━━━━━━━━━━━━━━━━━\n"
+    text += "Buyruqlar:\n"
+    text += "• Reja tahrirlash: reja nomini yozing (masalan: <code>start</code>)\n"
+    text += "• Userga obuna berish: <code>obuna 123456789 premium</code>"
+
+    await message.answer(text, parse_mode='HTML')
+    await AdminStates.SubSelectPlan.set()
+
+
+@dp.message_handler(state=AdminStates.SubSelectPlan)
+async def admin_sub_select_plan(message: types.Message, state: FSMContext):
+    """Reja tanlash yoki userga obuna berish"""
+    text = message.text.strip()
+
+    # "obuna telegram_id plan_name" formatida — userga obuna berish
+    if text.lower().startswith("obuna "):
+        parts = text.split()
+        if len(parts) >= 3:
+            try:
+                target_tid = int(parts[1])
+                plan_name = parts[2].lower()
+                plan = user_db.get_plan(plan_name)
+                if not plan:
+                    await message.answer(f"❌ '{plan_name}' rejasi topilmadi!")
+                    await state.finish()
+                    return
+
+                success = user_db.activate_subscription(target_tid, plan_name)
+                if success:
+                    await message.answer(
+                        f"✅ Obuna berildi!\n\n"
+                        f"👤 User: {target_tid}\n"
+                        f"📦 Reja: {plan['display_name']}\n"
+                        f"📅 Muddat: {plan['duration_days']} kun",
+                        parse_mode='HTML'
+                    )
+                    # Userga xabar
+                    try:
+                        await bot.send_message(
+                            target_tid,
+                            f"🎉 Sizga <b>{plan['display_name']}</b> obunasi berildi!\n"
+                            f"📅 Muddat: {plan['duration_days']} kun\n\n"
+                            f"⭐ Obuna tugmasini bosib tekshiring!",
+                            parse_mode='HTML'
+                        )
+                    except Exception:
+                        pass
+                else:
+                    await message.answer("❌ Obuna berishda xatolik!")
+            except ValueError:
+                await message.answer("❌ Noto'g'ri telegram_id!")
+        else:
+            await message.answer("❌ Format: <code>obuna telegram_id plan_name</code>", parse_mode='HTML')
+        await state.finish()
+        return
+
+    # Reja nomini kiritdi — tahrirlash
+    plan = user_db.get_plan(text.lower())
+    if not plan:
+        await message.answer(f"❌ '{text}' rejasi topilmadi!\n\n/panel — ortga qaytish")
+        await state.finish()
+        return
+
+    await state.update_data(edit_plan=text.lower())
+
+    field_text = f"""
+📦 <b>{plan['display_name']}</b> rejasini tahrirlash
+
+Qaysi maydonni o'zgartirmoqchisiz?
+
+1️⃣ <code>price</code> — Narx (hozir: {plan['price']:,.0f})
+2️⃣ <code>max_presentations</code> — Max prezentatsiya (hozir: {plan['max_presentations']})
+3️⃣ <code>max_courseworks</code> — Max mustaqil ish (hozir: {plan['max_courseworks']})
+4️⃣ <code>max_slides</code> — Max slaydlar (hozir: {plan['max_slides']})
+5️⃣ <code>duration_days</code> — Muddat kun (hozir: {plan['duration_days']})
+
+Maydon nomini kiriting:
+"""
+    await message.answer(field_text, parse_mode='HTML')
+    await AdminStates.SubEditField.set()
+
+
+@dp.message_handler(state=AdminStates.SubEditField)
+async def admin_sub_edit_field(message: types.Message, state: FSMContext):
+    """Tahrir qilinadigan maydonni tanlash"""
+    field = message.text.strip().lower()
+    allowed = ['price', 'max_presentations', 'max_courseworks', 'max_slides', 'duration_days']
+
+    if field not in allowed:
+        await message.answer(f"❌ Noto'g'ri maydon! Mavjud: {', '.join(allowed)}")
+        await state.finish()
+        return
+
+    await state.update_data(edit_field=field)
+    await message.answer(f"✍️ <code>{field}</code> uchun yangi qiymatni kiriting (faqat raqam):", parse_mode='HTML')
+    await AdminStates.SubEditValue.set()
+
+
+@dp.message_handler(state=AdminStates.SubEditValue)
+async def admin_sub_edit_value(message: types.Message, state: FSMContext):
+    """Yangi qiymat kiritish"""
+    try:
+        value = float(message.text.strip().replace(',', ''))
+    except ValueError:
+        await message.answer("❌ Faqat raqam kiriting!")
+        return
+
+    data = await state.get_data()
+    plan_name = data.get('edit_plan')
+    field = data.get('edit_field')
+
+    # Integer bo'lishi kerak bo'lgan fieldlar
+    if field in ['max_presentations', 'max_courseworks', 'max_slides', 'duration_days']:
+        value = int(value)
+
+    success = user_db.update_plan(plan_name, **{field: value})
+
+    if success:
+        plan = user_db.get_plan(plan_name)
+        await message.answer(
+            f"✅ <b>Yangilandi!</b>\n\n"
+            f"📦 Reja: {plan['display_name']}\n"
+            f"🔑 {field} = <b>{value}</b>",
+            parse_mode='HTML',
+            reply_markup=menu_admin
+        )
+    else:
+        await message.answer("❌ Yangilashda xatolik!", reply_markup=menu_admin)
+
+    await state.finish()
 
 
 # ==================== BUTTON HANDLER ====================
