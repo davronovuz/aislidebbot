@@ -121,9 +121,221 @@ class UserDatabase(Database):
         self.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON PresentationTasks(status);", commit=True)
         self.execute("CREATE INDEX IF NOT EXISTS idx_tasks_uuid ON PresentationTasks(task_uuid);", commit=True)
 
-    # ==================== USER METHODLAR ====================
+    # ==================== SUBSCRIPTION JADVALI ====================
 
-    # users_db.py ga qo'shish
+    def create_table_subscriptions(self):
+        """Obuna rejalari va foydalanuvchi obunalari"""
+        # Obuna rejalari
+        sql_plans = """
+        CREATE TABLE IF NOT EXISTS SubscriptionPlans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(50) NOT NULL UNIQUE,
+            display_name VARCHAR(100) NOT NULL,
+            price DECIMAL(10, 2) NOT NULL DEFAULT 0,
+            duration_days INTEGER NOT NULL DEFAULT 30,
+            max_presentations INTEGER NOT NULL DEFAULT 0,
+            max_courseworks INTEGER NOT NULL DEFAULT 0,
+            max_slides INTEGER NOT NULL DEFAULT 7,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+        self.execute(sql_plans, commit=True)
+
+        # Default rejalar
+        default_plans = [
+            ('free', 'Bepul', 0, 30, 1, 0, 7),
+            ('start', 'Start', 29900, 30, 10, 5, 15),
+            ('premium', 'Premium', 79900, 30, 999, 999, 20),
+        ]
+        for name, display, price, days, pres, cw, slides in default_plans:
+            self.execute("""
+                INSERT OR IGNORE INTO SubscriptionPlans
+                (name, display_name, price, duration_days, max_presentations, max_courseworks, max_slides)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, parameters=(name, display, price, days, pres, cw, slides), commit=True)
+
+        # Foydalanuvchi obunalari
+        sql_subs = """
+        CREATE TABLE IF NOT EXISTS UserSubscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            plan_name VARCHAR(50) NOT NULL DEFAULT 'free',
+            started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            presentations_used INTEGER DEFAULT 0,
+            courseworks_used INTEGER DEFAULT 0,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
+        );
+        """
+        self.execute(sql_subs, commit=True)
+        self.execute("CREATE INDEX IF NOT EXISTS idx_usersub_user ON UserSubscriptions(user_id);", commit=True)
+
+    # ==================== SUBSCRIPTION METHODLAR ====================
+
+    def get_subscription_plans(self) -> List[Dict]:
+        """Barcha aktiv obuna rejalarini olish"""
+        sql = "SELECT name, display_name, price, duration_days, max_presentations, max_courseworks, max_slides FROM SubscriptionPlans WHERE is_active = TRUE ORDER BY price ASC"
+        results = self.execute(sql, fetchall=True)
+        plans = []
+        for r in results:
+            plans.append({
+                'name': r[0], 'display_name': r[1], 'price': float(r[2]),
+                'duration_days': r[3], 'max_presentations': r[4],
+                'max_courseworks': r[5], 'max_slides': r[6],
+            })
+        return plans
+
+    def get_plan(self, plan_name: str) -> Optional[Dict]:
+        """Bitta obuna rejasini olish"""
+        sql = "SELECT name, display_name, price, duration_days, max_presentations, max_courseworks, max_slides FROM SubscriptionPlans WHERE name = ? AND is_active = TRUE"
+        r = self.execute(sql, parameters=(plan_name,), fetchone=True)
+        if r:
+            return {
+                'name': r[0], 'display_name': r[1], 'price': float(r[2]),
+                'duration_days': r[3], 'max_presentations': r[4],
+                'max_courseworks': r[5], 'max_slides': r[6],
+            }
+        return None
+
+    def update_plan(self, plan_name: str, **kwargs) -> bool:
+        """Admin uchun — reja sozlamalarini o'zgartirish"""
+        try:
+            allowed = ['price', 'max_presentations', 'max_courseworks', 'max_slides', 'display_name', 'duration_days']
+            updates = []
+            params = []
+            for key, val in kwargs.items():
+                if key in allowed:
+                    updates.append(f"{key} = ?")
+                    params.append(val)
+            if not updates:
+                return False
+            params.append(plan_name)
+            sql = f"UPDATE SubscriptionPlans SET {', '.join(updates)} WHERE name = ?"
+            self.execute(sql, parameters=tuple(params), commit=True)
+            return True
+        except Exception as e:
+            print(f"❌ Plan update xato: {e}")
+            return False
+
+    def get_user_subscription(self, telegram_id: int) -> Optional[Dict]:
+        """Foydalanuvchining aktiv obunasini olish. Obuna yo'q bo'lsa avtomatik bepul reja beradi."""
+        user_id = self.get_user_id(telegram_id)
+        if not user_id:
+            return None
+        sql = """
+        SELECT us.plan_name, us.started_at, us.expires_at, us.presentations_used, us.courseworks_used,
+               sp.display_name, sp.max_presentations, sp.max_courseworks, sp.max_slides, sp.price
+        FROM UserSubscriptions us
+        JOIN SubscriptionPlans sp ON us.plan_name = sp.name
+        WHERE us.user_id = ? AND us.is_active = TRUE AND us.expires_at > datetime('now')
+        ORDER BY us.id DESC LIMIT 1
+        """
+        r = self.execute(sql, parameters=(user_id,), fetchone=True)
+        if r:
+            return {
+                'plan_name': r[0], 'started_at': r[1], 'expires_at': r[2],
+                'presentations_used': r[3], 'courseworks_used': r[4],
+                'display_name': r[5], 'max_presentations': r[6],
+                'max_courseworks': r[7], 'max_slides': r[8], 'price': float(r[9]),
+            }
+
+        # Obuna yo'q — avtomatik bepul reja berish (mavjud userlar uchun)
+        self.activate_subscription(telegram_id, 'free')
+        r = self.execute(sql, parameters=(user_id,), fetchone=True)
+        if r:
+            return {
+                'plan_name': r[0], 'started_at': r[1], 'expires_at': r[2],
+                'presentations_used': r[3], 'courseworks_used': r[4],
+                'display_name': r[5], 'max_presentations': r[6],
+                'max_courseworks': r[7], 'max_slides': r[8], 'price': float(r[9]),
+            }
+        return None
+
+    def activate_subscription(self, telegram_id: int, plan_name: str) -> bool:
+        """Obuna aktivlashtirish (to'lovdan keyin)"""
+        try:
+            user_id = self.get_user_id(telegram_id)
+            if not user_id:
+                return False
+            plan = self.get_plan(plan_name)
+            if not plan:
+                return False
+
+            # Avvalgi aktiv obunani o'chirish
+            self.execute(
+                "UPDATE UserSubscriptions SET is_active = FALSE WHERE user_id = ? AND is_active = TRUE",
+                parameters=(user_id,), commit=True
+            )
+
+            # Yangi obuna
+            days = plan['duration_days']
+            sql = """
+            INSERT INTO UserSubscriptions (user_id, plan_name, started_at, expires_at, presentations_used, courseworks_used)
+            VALUES (?, ?, datetime('now'), datetime('now', ?), 0, 0)
+            """
+            self.execute(sql, parameters=(user_id, plan_name, f'+{days} days'), commit=True)
+            print(f"✅ Obuna aktivlashtirildi: User {telegram_id}, Plan: {plan_name}")
+            return True
+        except Exception as e:
+            print(f"❌ Obuna aktivlashtirishda xato: {e}")
+            return False
+
+    def use_subscription_presentation(self, telegram_id: int) -> bool:
+        """Obunadan 1 ta prezentatsiya ishlatish"""
+        sub = self.get_user_subscription(telegram_id)
+        if not sub:
+            return False
+        if sub['presentations_used'] >= sub['max_presentations']:
+            return False
+        user_id = self.get_user_id(telegram_id)
+        self.execute(
+            """UPDATE UserSubscriptions SET presentations_used = presentations_used + 1
+               WHERE user_id = ? AND is_active = TRUE AND expires_at > datetime('now')""",
+            parameters=(user_id,), commit=True
+        )
+        return True
+
+    def use_subscription_coursework(self, telegram_id: int) -> bool:
+        """Obunadan 1 ta mustaqil ish ishlatish"""
+        sub = self.get_user_subscription(telegram_id)
+        if not sub:
+            return False
+        if sub['courseworks_used'] >= sub['max_courseworks']:
+            return False
+        user_id = self.get_user_id(telegram_id)
+        self.execute(
+            """UPDATE UserSubscriptions SET courseworks_used = courseworks_used + 1
+               WHERE user_id = ? AND is_active = TRUE AND expires_at > datetime('now')""",
+            parameters=(user_id,), commit=True
+        )
+        return True
+
+    def can_use_subscription(self, telegram_id: int, service: str = 'presentation') -> Dict:
+        """Obunadan foydalanish mumkinmi tekshirish
+
+        Returns: {can_use: bool, reason: str, sub: dict|None}
+        """
+        sub = self.get_user_subscription(telegram_id)
+        if not sub:
+            return {'can_use': False, 'reason': 'no_subscription', 'sub': None}
+
+        if service == 'presentation':
+            if sub['presentations_used'] >= sub['max_presentations']:
+                return {'can_use': False, 'reason': 'limit_reached', 'sub': sub}
+            remaining = sub['max_presentations'] - sub['presentations_used']
+            return {'can_use': True, 'reason': 'ok', 'sub': sub, 'remaining': remaining}
+        elif service == 'coursework':
+            if sub['courseworks_used'] >= sub['max_courseworks']:
+                return {'can_use': False, 'reason': 'limit_reached', 'sub': sub}
+            remaining = sub['max_courseworks'] - sub['courseworks_used']
+            return {'can_use': True, 'reason': 'ok', 'sub': sub, 'remaining': remaining}
+
+        return {'can_use': False, 'reason': 'unknown_service', 'sub': None}
+
+    # ==================== USER METHODLAR ====================
 
     def create_business_plans_table(self):
         """Biznes planlar jadvali"""
@@ -171,6 +383,8 @@ class UserDatabase(Database):
             if created_at is None:
                 created_at = datetime.now().isoformat()
             self.execute(sql, parameters=(telegram_id, username, created_at), commit=True)
+            # Avtomatik bepul obuna berish
+            self.activate_subscription(telegram_id, 'free')
 
     def get_user_id(self, telegram_id: int) -> Optional[int]:
         sql = "SELECT id FROM Users WHERE telegram_id = ?"
@@ -557,6 +771,103 @@ class UserDatabase(Database):
             'pending_deposits': float(pending_deposits),
             'total_revenue': float(total_deposited)
         }
+
+    # ==================== MARKETPLACE ====================
+
+    def create_table_marketplace(self):
+        """Shablonlar va tayyor ishlar jadvallari"""
+        sql_templates = """
+        CREATE TABLE IF NOT EXISTS Templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(200) NOT NULL,
+            category VARCHAR(50) DEFAULT 'general',
+            slide_count INTEGER DEFAULT 10,
+            price DECIMAL(10,2) DEFAULT 0,
+            colors VARCHAR(200) DEFAULT 'linear-gradient(135deg,#ff6b35,#f7931e)',
+            file_id TEXT NOT NULL,
+            preview_file_id TEXT NULL,
+            preview_url TEXT NULL,
+            is_premium BOOLEAN DEFAULT FALSE,
+            is_active BOOLEAN DEFAULT TRUE,
+            downloads INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+        self.execute(sql_templates, commit=True)
+
+        sql_works = """
+        CREATE TABLE IF NOT EXISTS ReadyWorks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title VARCHAR(300) NOT NULL,
+            subject VARCHAR(200) DEFAULT '',
+            work_type VARCHAR(50) DEFAULT 'mustaqil_ish',
+            page_count INTEGER DEFAULT 10,
+            price DECIMAL(10,2) NOT NULL DEFAULT 0,
+            file_id TEXT NOT NULL,
+            preview_file_id TEXT NULL,
+            preview_available BOOLEAN DEFAULT FALSE,
+            description TEXT DEFAULT '',
+            language VARCHAR(10) DEFAULT 'uz',
+            is_active BOOLEAN DEFAULT TRUE,
+            downloads INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+        self.execute(sql_works, commit=True)
+
+    def get_templates(self, category: str = '') -> List[Dict]:
+        if category:
+            rows = self.execute(
+                "SELECT id,name,category,price,slide_count,preview_url,colors,is_premium FROM Templates WHERE is_active=1 AND category=? ORDER BY created_at DESC",
+                parameters=(category,), fetchall=True
+            )
+        else:
+            rows = self.execute(
+                "SELECT id,name,category,price,slide_count,preview_url,colors,is_premium FROM Templates WHERE is_active=1 ORDER BY created_at DESC",
+                fetchall=True
+            )
+        return [{'id':r[0],'name':r[1],'category':r[2],'price':float(r[3]),'slide_count':r[4],'preview_url':r[5],'colors':r[6],'is_premium':bool(r[7])} for r in (rows or [])]
+
+    def get_template(self, template_id: int) -> Optional[Dict]:
+        r = self.execute(
+            "SELECT id,name,category,price,slide_count,preview_url,colors,is_premium,file_id FROM Templates WHERE id=? AND is_active=1",
+            parameters=(template_id,), fetchone=True
+        )
+        if not r: return None
+        return {'id':r[0],'name':r[1],'category':r[2],'price':float(r[3]),'slide_count':r[4],'preview_url':r[5],'colors':r[6],'is_premium':bool(r[7]),'file_id':r[8]}
+
+    def add_template(self, name: str, category: str, slide_count: int, price: float, colors: str, file_id: str, preview_file_id: str = None, is_premium: bool = False) -> int:
+        return self.execute(
+            "INSERT INTO Templates (name,category,slide_count,price,colors,file_id,preview_file_id,is_premium) VALUES (?,?,?,?,?,?,?,?)",
+            parameters=(name, category, slide_count, price, colors, file_id, preview_file_id, is_premium),
+            commit=True, fetchone=False
+        )
+
+    def get_ready_works(self, work_type: str = '', q: str = '') -> List[Dict]:
+        sql = "SELECT id,title,subject,work_type,page_count,price,preview_available FROM ReadyWorks WHERE is_active=1"
+        params = []
+        if work_type:
+            sql += " AND work_type=?"; params.append(work_type)
+        if q:
+            sql += " AND (title LIKE ? OR subject LIKE ?)"; params += [f'%{q}%', f'%{q}%']
+        sql += " ORDER BY created_at DESC"
+        rows = self.execute(sql, parameters=tuple(params) if params else None, fetchall=True)
+        return [{'id':r[0],'title':r[1],'subject':r[2],'work_type':r[3],'page_count':r[4],'price':float(r[5]),'preview_available':bool(r[6])} for r in (rows or [])]
+
+    def get_ready_work(self, work_id: int) -> Optional[Dict]:
+        r = self.execute(
+            "SELECT id,title,subject,work_type,page_count,price,preview_available,description,language,file_id,preview_file_id FROM ReadyWorks WHERE id=? AND is_active=1",
+            parameters=(work_id,), fetchone=True
+        )
+        if not r: return None
+        return {'id':r[0],'title':r[1],'subject':r[2],'work_type':r[3],'page_count':r[4],'price':float(r[5]),'preview_available':bool(r[6]),'description':r[7],'language':r[8],'file_id':r[9],'preview_file_id':r[10]}
+
+    def add_ready_work(self, title: str, subject: str, work_type: str, page_count: int, price: float, file_id: str, description: str = '', language: str = 'uz', preview_file_id: str = None) -> int:
+        return self.execute(
+            "INSERT INTO ReadyWorks (title,subject,work_type,page_count,price,file_id,description,language,preview_file_id,preview_available) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            parameters=(title, subject, work_type, page_count, price, file_id, description, language, preview_file_id, preview_file_id is not None),
+            commit=True, fetchone=False
+        )
 
     # ==================== ESKI METHODLAR ====================
 

@@ -260,6 +260,35 @@ async def _handle_submit_document(telegram_id: int, data: dict):
         return web.json_response({'error': str(e)}, status=500)
 
 
+async def handle_templates(request):
+    """Shablonlar ro'yxati"""
+    try:
+        auth = request.headers.get('Authorization', '')
+        if auth != f'Bearer {API_SECRET}':
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+        category = request.rel_url.query.get('category', '')
+        templates = user_db.get_templates(category=category)
+        return web.json_response({'ok': True, 'templates': templates})
+    except Exception as e:
+        logger.error(f"❌ templates xato: {e}")
+        return web.json_response({'ok': True, 'templates': []})
+
+
+async def handle_ready_works(request):
+    """Tayyor ishlar ro'yxati"""
+    try:
+        auth = request.headers.get('Authorization', '')
+        if auth != f'Bearer {API_SECRET}':
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+        q = request.rel_url.query.get('q', '')
+        work_type = request.rel_url.query.get('type', '')
+        works = user_db.get_ready_works(work_type=work_type, q=q)
+        return web.json_response({'ok': True, 'works': works})
+    except Exception as e:
+        logger.error(f"❌ ready-works xato: {e}")
+        return web.json_response({'ok': True, 'works': []})
+
+
 async def handle_user_info(request):
     """Foydalanuvchi ma'lumotlari — balans, obuna, statistika"""
     try:
@@ -383,6 +412,8 @@ async def start_api_server():
     app.router.add_get('/api/user-info', handle_user_info)
     app.router.add_get('/api/user-tasks', handle_user_tasks)
     app.router.add_get('/api/user-transactions', handle_user_transactions)
+    app.router.add_get('/api/templates', handle_templates)
+    app.router.add_get('/api/ready-works', handle_ready_works)
     app.router.add_get('/api/health', handle_health)
 
     # CORS middleware
@@ -430,6 +461,7 @@ async def on_startup(dispatcher):
         user_db.create_table_presentation_tasks()
         user_db.create_business_plans_table()
         user_db.create_table_subscriptions()
+        user_db.create_table_marketplace()
         channel_db.create_table_channels()
         logger.info("✅ Database jadvallari tayyor")
     except Exception as e:
