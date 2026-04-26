@@ -6,7 +6,7 @@ import logging
 
 from data.config import ADMINS
 from loader import dp, user_db, bot
-from keyboards.default.default_keyboard import menu_ichki_admin, menu_admin
+from keyboards.default.default_keyboard import menu_ichki_admin, menu_admin, menu_ichki_bozor
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,25 @@ class AdminStates(StatesGroup):
     SubEditValue = State()
     SubActivateUser = State()
     SubActivatePlan = State()
+
+    # Bozor — Shablon qo'shish
+    TemplateFile = State()
+    TemplateName = State()
+    TemplateCategory = State()
+    TemplateSlideCount = State()
+    TemplatePrice = State()
+    TemplatePreview = State()
+    TemplateColors = State()
+
+    # Bozor — Tayyor ish qo'shish
+    WorkFile = State()
+    WorkTitle = State()
+    WorkSubject = State()
+    WorkType = State()
+    WorkPageCount = State()
+    WorkPrice = State()
+    WorkPreview = State()
+    WorkDescription = State()
 
 
 # ==================== PERMISSION CHECK ====================
@@ -1401,3 +1420,333 @@ async def stats_button_handler(message: types.Message):
     """Statistika tugmasi"""
     await control_panel(message)
 
+
+# ==================== BOZOR BOSHQARISH ====================
+
+WORK_TYPE_MAP = {
+    '1': 'mustaqil_ish',
+    '2': 'referat',
+    '3': 'kurs_ishi',
+    '4': 'diplom',
+    '5': 'magistr',
+}
+WORK_TYPE_LABELS = {
+    'mustaqil_ish': 'Mustaqil ish',
+    'referat': 'Referat',
+    'kurs_ishi': 'Kurs ishi',
+    'diplom': 'Diplom ishi',
+    'magistr': 'Magistr',
+}
+
+
+@dp.message_handler(Text(equals='🏪 Bozor boshqarish'))
+async def marketplace_menu(message: types.Message):
+    if not await check_admin_permission(message.from_user.id):
+        return
+    await message.answer("🏪 Bozor boshqaruvi:", reply_markup=menu_ichki_bozor)
+
+
+# ─── SHABLON QO'SHISH ─────────────────────────────────────────────────────────
+
+@dp.message_handler(Text(equals="➕ Shablon qo'shish"))
+async def add_template_start(message: types.Message):
+    if not await check_admin_permission(message.from_user.id):
+        return
+    await message.answer(
+        "📎 Shablon PPTX faylini yuboring:\n(Telegram'ga fayl sifatida yuklang, rasm sifatida emas)",
+        reply_markup=types.ReplyKeyboardMarkup(
+            keyboard=[[types.KeyboardButton("❌ Bekor qilish")]], resize_keyboard=True
+        )
+    )
+    await AdminStates.TemplateFile.set()
+
+
+@dp.message_handler(content_types=types.ContentType.DOCUMENT, state=AdminStates.TemplateFile)
+async def add_template_file(message: types.Message, state: FSMContext):
+    doc = message.document
+    if not doc.file_name.endswith('.pptx'):
+        await message.answer("⚠️ Faqat .pptx fayl yuboring!")
+        return
+    await state.update_data(file_id=doc.file_id)
+    await message.answer("📝 Shablon nomini kiriting (masalan: 'Biznes Blue'):")
+    await AdminStates.TemplateName.set()
+
+
+@dp.message_handler(Text(equals="❌ Bekor qilish"), state='*')
+async def cancel_marketplace_state(message: types.Message, state: FSMContext):
+    current = await state.get_state()
+    if current and (current.startswith('AdminStates:Template') or current.startswith('AdminStates:Work')):
+        await state.finish()
+        await message.answer("❌ Bekor qilindi.", reply_markup=menu_ichki_bozor)
+
+
+@dp.message_handler(state=AdminStates.TemplateName)
+async def add_template_name(message: types.Message, state: FSMContext):
+    await state.update_data(name=message.text.strip())
+    await message.answer(
+        "📂 Kategoriya:\n1 — Biznes\n2 — Ta'lim\n3 — Ijodiy\n4 — Boshqa\n\nRaqam yuboring:"
+    )
+    await AdminStates.TemplateCategory.set()
+
+
+@dp.message_handler(state=AdminStates.TemplateCategory)
+async def add_template_category(message: types.Message, state: FSMContext):
+    cats = {'1': 'business', '2': 'education', '3': 'creative', '4': 'general'}
+    cat = cats.get(message.text.strip(), 'general')
+    await state.update_data(category=cat)
+    await message.answer("🔢 Slaydlar soni (masalan: 10):")
+    await AdminStates.TemplateSlideCount.set()
+
+
+@dp.message_handler(state=AdminStates.TemplateSlideCount)
+async def add_template_slide_count(message: types.Message, state: FSMContext):
+    try:
+        count = int(message.text.strip())
+    except ValueError:
+        await message.answer("⚠️ Raqam kiriting!")
+        return
+    await state.update_data(slide_count=count)
+    await message.answer("💰 Narxi (so'm, 0 = bepul, masalan: 15000):")
+    await AdminStates.TemplatePrice.set()
+
+
+@dp.message_handler(state=AdminStates.TemplatePrice)
+async def add_template_price(message: types.Message, state: FSMContext):
+    try:
+        price = float(message.text.strip())
+    except ValueError:
+        await message.answer("⚠️ Raqam kiriting!")
+        return
+    await state.update_data(price=price)
+    await message.answer(
+        "🖼 Preview rasmini yuboring (ixtiyoriy).\n"
+        "⏭ O'tkazib yuborish uchun /skip yozing:"
+    )
+    await AdminStates.TemplatePreview.set()
+
+
+@dp.message_handler(commands=['skip'], state=AdminStates.TemplatePreview)
+async def add_template_skip_preview(message: types.Message, state: FSMContext):
+    await state.update_data(preview_file_id=None)
+    await message.answer(
+        "🎨 Rang gradientini kiriting (masalan: linear-gradient(135deg,#667eea,#764ba2))\n"
+        "⏭ O'tkazib yuborish uchun /skip:"
+    )
+    await AdminStates.TemplateColors.set()
+
+
+@dp.message_handler(content_types=types.ContentType.PHOTO, state=AdminStates.TemplatePreview)
+async def add_template_preview(message: types.Message, state: FSMContext):
+    photo_id = message.photo[-1].file_id
+    await state.update_data(preview_file_id=photo_id)
+    await message.answer(
+        "🎨 Rang gradientini kiriting (masalan: linear-gradient(135deg,#667eea,#764ba2))\n"
+        "⏭ O'tkazib yuborish uchun /skip:"
+    )
+    await AdminStates.TemplateColors.set()
+
+
+@dp.message_handler(commands=['skip'], state=AdminStates.TemplateColors)
+async def add_template_skip_colors(message: types.Message, state: FSMContext):
+    await _save_template(message, state, colors='linear-gradient(135deg,#ff6b35,#f7931e)')
+
+
+@dp.message_handler(state=AdminStates.TemplateColors)
+async def add_template_colors(message: types.Message, state: FSMContext):
+    await _save_template(message, state, colors=message.text.strip())
+
+
+async def _save_template(message: types.Message, state: FSMContext, colors: str):
+    data = await state.get_data()
+    try:
+        user_db.add_template(
+            name=data['name'],
+            category=data['category'],
+            slide_count=data['slide_count'],
+            price=data['price'],
+            colors=colors,
+            file_id=data['file_id'],
+            preview_file_id=data.get('preview_file_id'),
+            is_premium=data['price'] > 0,
+        )
+        await message.answer(
+            f"✅ Shablon qo'shildi!\n\n"
+            f"📝 Nom: {data['name']}\n"
+            f"📂 Kategoriya: {data['category']}\n"
+            f"🔢 Slaydlar: {data['slide_count']}\n"
+            f"💰 Narx: {data['price']:,.0f} so'm",
+            reply_markup=menu_ichki_bozor
+        )
+    except Exception as e:
+        await message.answer(f"❌ Xato: {e}", reply_markup=menu_ichki_bozor)
+    await state.finish()
+
+
+# ─── SHABLONLAR RO'YXATI ──────────────────────────────────────────────────────
+
+@dp.message_handler(Text(equals="📋 Shablonlar ro'yxati"))
+async def list_templates(message: types.Message):
+    if not await check_admin_permission(message.from_user.id):
+        return
+    templates = user_db.get_templates()
+    if not templates:
+        await message.answer("📭 Shablonlar yo'q hali.", reply_markup=menu_ichki_bozor)
+        return
+    text = f"📋 Shablonlar ({len(templates)} ta):\n\n"
+    for t in templates:
+        price_str = f"{t['price']:,.0f} so'm" if t['price'] > 0 else "Bepul"
+        text += f"#{t['id']} {t['name']} — {t['slide_count']} slayd — {price_str}\n"
+    await message.answer(text, reply_markup=menu_ichki_bozor)
+
+
+# ─── TAYYOR ISH QO'SHISH ──────────────────────────────────────────────────────
+
+@dp.message_handler(Text(equals="📚 Tayyor ish qo'shish"))
+async def add_work_start(message: types.Message):
+    if not await check_admin_permission(message.from_user.id):
+        return
+    await message.answer(
+        "📎 Tayyor ish faylini yuboring (PDF yoki DOCX):",
+        reply_markup=types.ReplyKeyboardMarkup(
+            keyboard=[[types.KeyboardButton("❌ Bekor qilish")]], resize_keyboard=True
+        )
+    )
+    await AdminStates.WorkFile.set()
+
+
+@dp.message_handler(content_types=types.ContentType.DOCUMENT, state=AdminStates.WorkFile)
+async def add_work_file(message: types.Message, state: FSMContext):
+    doc = message.document
+    fname = doc.file_name.lower()
+    if not (fname.endswith('.pdf') or fname.endswith('.docx') or fname.endswith('.doc')):
+        await message.answer("⚠️ Faqat PDF yoki DOCX fayl yuboring!")
+        return
+    await state.update_data(file_id=doc.file_id)
+    await message.answer("📝 Ish sarlavhasini kiriting:")
+    await AdminStates.WorkTitle.set()
+
+
+@dp.message_handler(state=AdminStates.WorkTitle)
+async def add_work_title(message: types.Message, state: FSMContext):
+    await state.update_data(title=message.text.strip())
+    await message.answer("📚 Fan nomini kiriting (masalan: Iqtisodiyot):")
+    await AdminStates.WorkSubject.set()
+
+
+@dp.message_handler(state=AdminStates.WorkSubject)
+async def add_work_subject(message: types.Message, state: FSMContext):
+    await state.update_data(subject=message.text.strip())
+    await message.answer(
+        "📂 Ish turi:\n"
+        "1 — Mustaqil ish\n"
+        "2 — Referat\n"
+        "3 — Kurs ishi\n"
+        "4 — Diplom ishi\n"
+        "5 — Magistr\n\n"
+        "Raqam yuboring:"
+    )
+    await AdminStates.WorkType.set()
+
+
+@dp.message_handler(state=AdminStates.WorkType)
+async def add_work_type(message: types.Message, state: FSMContext):
+    work_type = WORK_TYPE_MAP.get(message.text.strip(), 'mustaqil_ish')
+    await state.update_data(work_type=work_type)
+    await message.answer("📄 Sahifalar soni (masalan: 25):")
+    await AdminStates.WorkPageCount.set()
+
+
+@dp.message_handler(state=AdminStates.WorkPageCount)
+async def add_work_page_count(message: types.Message, state: FSMContext):
+    try:
+        count = int(message.text.strip())
+    except ValueError:
+        await message.answer("⚠️ Raqam kiriting!")
+        return
+    await state.update_data(page_count=count)
+    await message.answer("💰 Narxi so'mda (masalan: 25000):")
+    await AdminStates.WorkPrice.set()
+
+
+@dp.message_handler(state=AdminStates.WorkPrice)
+async def add_work_price(message: types.Message, state: FSMContext):
+    try:
+        price = float(message.text.strip())
+    except ValueError:
+        await message.answer("⚠️ Raqam kiriting!")
+        return
+    await state.update_data(price=price)
+    await message.answer(
+        "🖼 Preview (namuna sahifa) rasmini yuboring (ixtiyoriy).\n"
+        "⏭ O'tkazib yuborish: /skip"
+    )
+    await AdminStates.WorkPreview.set()
+
+
+@dp.message_handler(commands=['skip'], state=AdminStates.WorkPreview)
+async def add_work_skip_preview(message: types.Message, state: FSMContext):
+    await state.update_data(preview_file_id=None)
+    await message.answer("📝 Tavsif kiriting (ixtiyoriy). /skip:")
+    await AdminStates.WorkDescription.set()
+
+
+@dp.message_handler(content_types=types.ContentType.PHOTO, state=AdminStates.WorkPreview)
+async def add_work_preview(message: types.Message, state: FSMContext):
+    await state.update_data(preview_file_id=message.photo[-1].file_id)
+    await message.answer("📝 Tavsif kiriting (ixtiyoriy). /skip:")
+    await AdminStates.WorkDescription.set()
+
+
+@dp.message_handler(commands=['skip'], state=AdminStates.WorkDescription)
+async def add_work_skip_description(message: types.Message, state: FSMContext):
+    await _save_ready_work(message, state, description='')
+
+
+@dp.message_handler(state=AdminStates.WorkDescription)
+async def add_work_description(message: types.Message, state: FSMContext):
+    await _save_ready_work(message, state, description=message.text.strip())
+
+
+async def _save_ready_work(message: types.Message, state: FSMContext, description: str):
+    data = await state.get_data()
+    try:
+        user_db.add_ready_work(
+            title=data['title'],
+            subject=data['subject'],
+            work_type=data['work_type'],
+            page_count=data['page_count'],
+            price=data['price'],
+            file_id=data['file_id'],
+            description=description,
+            preview_file_id=data.get('preview_file_id'),
+        )
+        label = WORK_TYPE_LABELS.get(data['work_type'], data['work_type'])
+        await message.answer(
+            f"✅ Tayyor ish qo'shildi!\n\n"
+            f"📝 Sarlavha: {data['title']}\n"
+            f"📂 Tur: {label}\n"
+            f"📚 Fan: {data['subject']}\n"
+            f"📄 Sahifalar: {data['page_count']}\n"
+            f"💰 Narx: {data['price']:,.0f} so'm",
+            reply_markup=menu_ichki_bozor
+        )
+    except Exception as e:
+        await message.answer(f"❌ Xato: {e}", reply_markup=menu_ichki_bozor)
+    await state.finish()
+
+
+# ─── TAYYOR ISHLAR RO'YXATI ───────────────────────────────────────────────────
+
+@dp.message_handler(Text(equals="📋 Tayyor ishlar ro'yxati"))
+async def list_ready_works(message: types.Message):
+    if not await check_admin_permission(message.from_user.id):
+        return
+    works = user_db.get_ready_works()
+    if not works:
+        await message.answer("📭 Tayyor ishlar yo'q hali.", reply_markup=menu_ichki_bozor)
+        return
+    text = f"📋 Tayyor ishlar ({len(works)} ta):\n\n"
+    for w in works:
+        label = WORK_TYPE_LABELS.get(w['work_type'], w['work_type'])
+        text += f"#{w['id']} {w['title']} — {label} — {w['price']:,.0f} so'm\n"
+    await message.answer(text, reply_markup=menu_ichki_bozor)

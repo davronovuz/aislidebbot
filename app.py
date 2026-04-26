@@ -55,6 +55,10 @@ async def handle_submit_presentation(request):
         if not telegram_id:
             return web.json_response({'error': 'telegram_id required'}, status=400)
 
+        # Ready work purchase branch
+        if data.get('type') == 'ready_work_purchase':
+            return await _handle_buy_ready_work(telegram_id, data)
+
         # Document submission branch
         if data.get('type') == 'document':
             return await _handle_submit_document(telegram_id, data)
@@ -260,6 +264,55 @@ async def _handle_submit_document(telegram_id: int, data: dict):
         return web.json_response({'error': str(e)}, status=500)
 
 
+async def _handle_buy_ready_work(telegram_id: int, data: dict):
+    """Tayyor ishni sotib olish va faylni yuborish"""
+    try:
+        work_id = int(data.get('work_id', 0))
+        work = user_db.get_ready_work(work_id)
+        if not work:
+            return web.json_response({'error': 'Work not found'}, status=404)
+
+        price = float(work['price'])
+        balance = user_db.get_user_balance(telegram_id)
+
+        if balance < price:
+            return web.json_response({
+                'error': 'insufficient_balance',
+                'required': price,
+                'balance': balance
+            }, status=402)
+
+        success = user_db.deduct_from_balance(telegram_id, price)
+        if not success:
+            return web.json_response({'error': 'Balance deduction failed'}, status=500)
+
+        user_db.create_transaction(
+            telegram_id=telegram_id, transaction_type='withdrawal',
+            amount=price, description=f"Tayyor ish: {work['title']}", status='approved'
+        )
+
+        try:
+            new_balance = user_db.get_user_balance(telegram_id)
+            caption = (
+                f"✅ <b>Tayyor ish yuborildi!</b>\n\n"
+                f"📝 {work['title']}\n"
+                f"💰 To'landi: {price:,.0f} so'm\n"
+                f"💳 Qoldi: {new_balance:,.0f} so'm"
+            )
+            await bot.send_document(telegram_id, work['file_id'], caption=caption, parse_mode='HTML')
+        except Exception as e:
+            user_db.add_to_balance(telegram_id, price)
+            logger.error(f"❌ Fayl yuborishda xato: {e}")
+            return web.json_response({'error': 'File delivery failed'}, status=500)
+
+        logger.info(f"✅ Tayyor ish sotildi: #{work_id} | User: {telegram_id}")
+        return web.json_response({'ok': True, 'amount_charged': price})
+
+    except Exception as e:
+        logger.error(f"❌ _handle_buy_ready_work xato: {e}")
+        return web.json_response({'error': str(e)}, status=500)
+
+
 async def handle_templates(request):
     """Shablonlar ro'yxati"""
     try:
@@ -272,6 +325,22 @@ async def handle_templates(request):
     except Exception as e:
         logger.error(f"❌ templates xato: {e}")
         return web.json_response({'ok': True, 'templates': []})
+
+
+async def handle_template_detail(request):
+    """Bitta shablon ma'lumoti"""
+    try:
+        auth = request.headers.get('Authorization', '')
+        if auth != f'Bearer {API_SECRET}':
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+        template_id = int(request.match_info.get('id', 0))
+        template = user_db.get_template(template_id)
+        if not template:
+            return web.json_response({'error': 'Not found'}, status=404)
+        return web.json_response({'ok': True, 'template': template})
+    except Exception as e:
+        logger.error(f"❌ template detail xato: {e}")
+        return web.json_response({'error': str(e)}, status=500)
 
 
 async def handle_ready_works(request):
@@ -287,6 +356,22 @@ async def handle_ready_works(request):
     except Exception as e:
         logger.error(f"❌ ready-works xato: {e}")
         return web.json_response({'ok': True, 'works': []})
+
+
+async def handle_ready_work_detail(request):
+    """Bitta tayyor ish ma'lumoti"""
+    try:
+        auth = request.headers.get('Authorization', '')
+        if auth != f'Bearer {API_SECRET}':
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+        work_id = int(request.match_info.get('id', 0))
+        work = user_db.get_ready_work(work_id)
+        if not work:
+            return web.json_response({'error': 'Not found'}, status=404)
+        return web.json_response({'ok': True, 'work': work})
+    except Exception as e:
+        logger.error(f"❌ ready-work detail xato: {e}")
+        return web.json_response({'error': str(e)}, status=500)
 
 
 async def handle_user_info(request):
@@ -413,7 +498,9 @@ async def start_api_server():
     app.router.add_get('/api/user-tasks', handle_user_tasks)
     app.router.add_get('/api/user-transactions', handle_user_transactions)
     app.router.add_get('/api/templates', handle_templates)
+    app.router.add_get('/api/templates/{id}', handle_template_detail)
     app.router.add_get('/api/ready-works', handle_ready_works)
+    app.router.add_get('/api/ready-works/{id}', handle_ready_work_detail)
     app.router.add_get('/api/health', handle_health)
 
     # CORS middleware

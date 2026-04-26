@@ -23,6 +23,9 @@ menu_admin = ReplyKeyboardMarkup(
             KeyboardButton(text='💵 Balans qoshish'),
         ],
         [
+            KeyboardButton(text='🏪 Bozor boshqarish'),
+        ],
+        [
             KeyboardButton(text='👤 Foydalanuvchi malumotlari'),
             KeyboardButton(text='🔙 Ortga qaytish'),
         ],
@@ -47,6 +50,24 @@ menu_ichki_admin = ReplyKeyboardMarkup(
     one_time_keyboard=True
 )
 
+
+menu_ichki_bozor = ReplyKeyboardMarkup(
+    keyboard=[
+        [
+            KeyboardButton(text='➕ Shablon qo\'shish'),
+            KeyboardButton(text='📋 Shablonlar ro\'yxati'),
+        ],
+        [
+            KeyboardButton(text='📚 Tayyor ish qo\'shish'),
+            KeyboardButton(text='📋 Tayyor ishlar ro\'yxati'),
+        ],
+        [
+            KeyboardButton(text='🔙 Ortga qaytish'),
+        ],
+    ],
+    resize_keyboard=True,
+    one_time_keyboard=True
+)
 
 menu_ichki_kanal = ReplyKeyboardMarkup(
     keyboard=[
