@@ -219,7 +219,7 @@ async def transaction_action(
                 user.telegram_id,
                 f"❌ <b>To'lov rad etildi!</b>\n\n"
                 f"💰 Miqdor: {tx.amount:,.0f} so'm\n"
-                f"Izoh: {body.admin_comment or 'Noma\\'lum sabab'}"
+                f"Izoh: {body.admin_comment or 'Noma lum sabab'}"
             ))
     else:
         raise HTTPException(status_code=400, detail="action must be approve or reject")
