@@ -76,7 +76,7 @@ class UserDatabase(Database):
         if not user_id:
             return None
         sql = """
-        SELECT us.plan_name, us.started_at, us.expires_at, us.presentations_used, us.courseworks_used,
+        SELECT us.plan_name, us.created_at, us.expires_at, us.presentations_used, us.courseworks_used,
                sp.display_name, sp.max_presentations, sp.max_courseworks, sp.max_slides, sp.price
         FROM user_subscriptions us
         JOIN subscription_plans sp ON us.plan_name = sp.plan_name
@@ -124,17 +124,16 @@ class UserDatabase(Database):
             days = plan['duration_days']
             sql = """
             INSERT INTO user_subscriptions
-                (user_id, plan_id, plan_name, started_at, expires_at,
+                (user_id, plan_id, plan_name, expires_at,
                  max_presentations, presentations_used,
                  max_courseworks, courseworks_used, max_slides, is_active)
-            SELECT ?, sp.id, ?, NOW(), NOW() + (%s * INTERVAL '1 day'),
+            SELECT ?, sp.id, ?, NOW() + (%s * INTERVAL '1 day'),
                    sp.max_presentations, 0,
                    sp.max_courseworks, 0, sp.max_slides, TRUE
             FROM subscription_plans sp WHERE sp.plan_name = %s
             ON CONFLICT (user_id) DO UPDATE SET
                 plan_id = EXCLUDED.plan_id,
                 plan_name = EXCLUDED.plan_name,
-                started_at = EXCLUDED.started_at,
                 expires_at = EXCLUDED.expires_at,
                 max_presentations = EXCLUDED.max_presentations,
                 presentations_used = 0,
@@ -335,7 +334,7 @@ class UserDatabase(Database):
                 t.description, t.receipt_file_id, t.status,
                 t.admin_id, t.created_at, t.updated_at, u.telegram_id
             FROM transactions t
-            JOIN Users u ON t.user_id = u.id
+            JOIN users u ON t.user_id = u.id
             WHERE t.id = ?
             """
             result = self.execute(sql, parameters=(trans_id,), fetchone=True)
@@ -413,7 +412,7 @@ class UserDatabase(Database):
         SELECT t.id, u.telegram_id, u.username, t.transaction_type, 
                t.amount, t.description, t.receipt_file_id, t.created_at
         FROM transactions t
-        JOIN Users u ON t.user_id = u.id
+        JOIN users u ON t.user_id = u.id
         WHERE t.status = 'pending'
         ORDER BY t.created_at DESC
         """
@@ -734,7 +733,7 @@ class UserDatabase(Database):
         self.execute("DELETE FROM admins WHERE user_id = ?", parameters=(user_id,), commit=True)
 
     def get_all_admins(self):
-        sql = "SELECT Admins.user_id, Users.telegram_id, Admins.name, Admins.is_super_admin FROM admins JOIN Users ON Admins.user_id = Users.id"
+        sql = "SELECT admins.user_id, users.telegram_id, admins.name, admins.is_super_admin FROM admins JOIN users ON admins.user_id = users.id"
         result = self.execute(sql, fetchall=True)
         if not result:
             return []
@@ -1077,7 +1076,7 @@ class UserDatabase(Database):
             result = self.execute(
                 """SELECT u.telegram_id, u.username, SUM(t.amount) as total
                    FROM transactions t
-                   JOIN Users u ON t.user_id = u.id
+                   JOIN users u ON t.user_id = u.id
                    WHERE t.transaction_type = 'deposit' 
                    AND t.status = 'approved'
                    AND t.created_at >= ? AND t.created_at <= ?
