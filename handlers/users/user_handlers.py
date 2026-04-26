@@ -6,8 +6,24 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 import logging
 import json
 import uuid
+import os
+import httpx
 
 from loader import dp, bot, user_db
+
+_API_BASE = os.getenv("API_INTERNAL_URL", "http://aislide_api:8000")
+_API_SECRET = os.getenv("API_SECRET", "")
+
+
+async def _trigger_task(task_uuid: str):
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(
+                f"{_API_BASE}/api/v1/tasks/trigger/{task_uuid}",
+                headers={"Authorization": f"Bearer {_API_SECRET}"}
+            )
+    except Exception as e:
+        logger.error(f"❌ Task trigger xato {task_uuid}: {e}")
 from keyboards.default.default_keyboard import (
     main_menu_keyboard,
     cancel_keyboard,
@@ -439,6 +455,7 @@ Tayyor bo'lgach sizga <b>professional PPTX fayl</b> yuboriladi! 🎉
 
             await message.answer(success_text, reply_markup=_kb(message), parse_mode='HTML')
             await state.finish()
+            await _trigger_task(task_uuid)
 
             logger.info(f"✅ Pitch Deck task yaratildi: {task_uuid} | User: {telegram_id} | Free: {is_free}")
 
@@ -875,6 +892,7 @@ Tayyor bo'lgach sizga <b>PPTX fayl</b> yuboriladi! 🎉
 
         await message.answer(success_text, reply_markup=_kb(message), parse_mode='HTML')
         await state.finish()
+        await _trigger_task(task_uuid)
 
         logger.info(
             f"✅ Prezentatsiya task yaratildi: {task_uuid} | User: {telegram_id} | Free: {is_free} | Theme: {selected_theme_id}")

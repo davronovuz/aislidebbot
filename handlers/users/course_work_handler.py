@@ -3,6 +3,7 @@ import os
 import uuid
 import logging
 import asyncio
+import httpx
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.types import ContentType
@@ -10,6 +11,20 @@ from aiogram.utils.exceptions import MessageCantBeEdited, MessageToDeleteNotFoun
 
 from loader import dp, bot, user_db
 from data.config import OPENAI_API_KEY
+
+_API_BASE = os.getenv("API_INTERNAL_URL", "http://aislide_api:8000")
+_API_SECRET = os.getenv("API_SECRET", "")
+
+
+async def _trigger_task(task_uuid: str):
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(
+                f"{_API_BASE}/api/v1/tasks/trigger/{task_uuid}",
+                headers={"Authorization": f"Bearer {_API_SECRET}"}
+            )
+    except Exception as e:
+        logging.getLogger(__name__).error(f"❌ Task trigger xato {task_uuid}: {e}")
 
 # --- IMPORTLAR ---
 from utils.course_work_generator import CourseWorkGenerator
@@ -312,6 +327,7 @@ async def _handle_presentation_web_data(message: types.Message, data: dict):
             )
 
         await message.answer(text, reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db), parse_mode='HTML')
+        await _trigger_task(task_uuid)
         logger.info(f"✅ Web prezentatsiya task: {task_uuid} | User: {telegram_id} | Free: {is_free}")
 
     except Exception as e:

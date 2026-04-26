@@ -40,9 +40,11 @@ services:
     container_name: aislide_bot
     env_file: .env
     environment:
-      - DATABASE_URL=postgresql://aislide:${POSTGRES_PASSWORD:-aislide_pg_2026}@postgres:5432/aislide
+      - DATABASE_URL_SYNC=postgresql://aislide:${POSTGRES_PASSWORD:-aislide_pg_2026}@postgres:5432/aislide
       - REDIS_URL=redis://redis:6379/0
       - PRESENTON_URL=http://presenton:80
+      - API_SECRET=${API_SECRET:-aislide_secret_2026}
+      - API_INTERNAL_URL=http://aislide_api:8000
     volumes:
       - ./data:/app/data
     depends_on:

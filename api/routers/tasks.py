@@ -191,6 +191,23 @@ async def _handle_ready_work_purchase(body: SubmitRequest, user: User, db: Async
     return SubmitResponse(task_uuid=task_uuid, amount_charged=float(work.price))
 
 
+@router.post("/trigger/{task_uuid}")
+async def trigger_task(
+    task_uuid: str,
+    _: None = Depends(require_api_secret),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bot creates task in DB itself, then calls this to enqueue it to Dramatiq."""
+    result = await db.execute(select(PresentationTask).where(PresentationTask.task_uuid == task_uuid))
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.status != "pending":
+        raise HTTPException(status_code=400, detail="Task is not pending")
+    _enqueue(task_uuid)
+    return {"ok": True, "task_uuid": task_uuid}
+
+
 @router.get("/status/{task_uuid}", response_model=TaskStatusOut)
 async def get_task_status(
     task_uuid: str,
