@@ -10,18 +10,7 @@ logger = logging.getLogger(__name__)
 class ChannelDatabase(Database):
 
     def create_table_channels(self):
-        """Kanallar jadvalini yaratish"""
-        sql_channels = """
-        CREATE TABLE IF NOT EXISTS Channels (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            channel_id BIGINT UNIQUE,
-            title VARCHAR(255),
-            invite_link VARCHAR(255) NOT NULL,
-            is_active BOOLEAN DEFAULT TRUE,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-        """
-        self.execute(sql_channels, commit=True)
+        pass  # Schema managed by Alembic
 
     def add_channel(self, channel_id: int, title: str, invite_link: str) -> bool:
         """
@@ -39,7 +28,7 @@ class ChannelDatabase(Database):
                 return True
 
             sql = """
-            INSERT INTO Channels (channel_id, title, invite_link)
+            INSERT INTO channels (channel_id, title, invite_link)
             VALUES (?, ?, ?)
             """
             self.execute(sql, parameters=(channel_id, title, invite_link), commit=True)
@@ -68,7 +57,7 @@ class ChannelDatabase(Database):
                 return False
 
             params.append(channel_id)
-            sql = f"UPDATE Channels SET {', '.join(updates)} WHERE channel_id = ?"
+            sql = f"UPDATE channels SET {', '.join(updates)} WHERE channel_id = ?"
             self.execute(sql, parameters=tuple(params), commit=True)
             logger.info(f"✅ Kanal yangilandi: {channel_id}")
             return True
@@ -80,7 +69,7 @@ class ChannelDatabase(Database):
     def remove_channel(self, channel_id: int) -> bool:
         """Kanalni o'chirish"""
         try:
-            sql = "DELETE FROM Channels WHERE channel_id = ?"
+            sql = "DELETE FROM channels WHERE channel_id = ?"
             self.execute(sql, parameters=(channel_id,), commit=True)
             logger.info(f"✅ Kanal o'chirildi: {channel_id}")
             return True
@@ -91,7 +80,7 @@ class ChannelDatabase(Database):
     def get_all_channels(self) -> list:
         """Barcha faol kanallar"""
         try:
-            sql = "SELECT * FROM Channels WHERE is_active = TRUE OR is_active = 1"
+            sql = "SELECT * FROM channels WHERE is_active = TRUE"
             result = self.execute(sql, fetchall=True)
             return result if result else []
         except Exception as e:
@@ -101,7 +90,7 @@ class ChannelDatabase(Database):
     def get_channel_by_id(self, channel_id: int):
         """Kanal ID bo'yicha olish"""
         try:
-            sql = "SELECT * FROM Channels WHERE channel_id = ?"
+            sql = "SELECT * FROM channels WHERE channel_id = ?"
             return self.execute(sql, parameters=(channel_id,), fetchone=True)
         except Exception as e:
             logger.error(f"❌ Kanalni olishda xato: {e}")
@@ -110,7 +99,7 @@ class ChannelDatabase(Database):
     def get_channel_by_invite_link(self, invite_link: str):
         """Invite link bo'yicha kanal olish"""
         try:
-            sql = "SELECT * FROM Channels WHERE invite_link = ?"
+            sql = "SELECT * FROM channels WHERE invite_link = ?"
             return self.execute(sql, parameters=(invite_link,), fetchone=True)
         except Exception as e:
             logger.error(f"❌ Kanalni olishda xato: {e}")
@@ -123,7 +112,7 @@ class ChannelDatabase(Database):
     def channel_exists(self, channel_id: int) -> bool:
         """Kanal mavjudligini tekshirish"""
         try:
-            sql = "SELECT 1 FROM Channels WHERE channel_id = ?"
+            sql = "SELECT 1 FROM channels WHERE channel_id = ?"
             result = self.execute(sql, parameters=(channel_id,), fetchone=True)
             return result is not None
         except Exception as e:
@@ -133,7 +122,7 @@ class ChannelDatabase(Database):
     def count_channels(self) -> int:
         """Kanallar sonini olish"""
         try:
-            sql = "SELECT COUNT(*) FROM Channels WHERE is_active = TRUE OR is_active = 1"
+            sql = "SELECT COUNT(*) FROM channels WHERE is_active = TRUE"
             result = self.execute(sql, fetchone=True)
             return result[0] if result else 0
         except Exception as e:
@@ -143,7 +132,7 @@ class ChannelDatabase(Database):
     def deactivate_channel(self, channel_id: int) -> bool:
         """Kanalni o'chirmasdan deaktiv qilish"""
         try:
-            sql = "UPDATE Channels SET is_active = FALSE WHERE channel_id = ?"
+            sql = "UPDATE channels SET is_active = FALSE WHERE channel_id = ?"
             self.execute(sql, parameters=(channel_id,), commit=True)
             return True
         except Exception as e:
@@ -153,7 +142,7 @@ class ChannelDatabase(Database):
     def activate_channel(self, channel_id: int) -> bool:
         """Kanalni aktiv qilish"""
         try:
-            sql = "UPDATE Channels SET is_active = TRUE WHERE channel_id = ?"
+            sql = "UPDATE channels SET is_active = TRUE WHERE channel_id = ?"
             self.execute(sql, parameters=(channel_id,), commit=True)
             return True
         except Exception as e:
