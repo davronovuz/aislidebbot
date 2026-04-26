@@ -77,6 +77,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+      start_period: 30s
     restart: unless-stopped
 
   # ─── Dramatiq worker — presentation/document generation ──────────────────────
@@ -96,8 +97,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      api:
         condition: service_healthy
     restart: unless-stopped
 
