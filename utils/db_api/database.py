@@ -1,6 +1,7 @@
 """PostgreSQL backend — drop-in replacement for the old SQLite Database class."""
 import os
 import logging
+import datetime
 import psycopg2
 
 logger = logging.getLogger(__name__)
@@ -9,6 +10,22 @@ DATABASE_URL_SYNC = os.getenv(
     "DATABASE_URL_SYNC",
     "postgresql://aislide:aislide_pg_2026@postgres:5432/aislide",
 )
+
+
+def _serialize_row(row):
+    """Convert a psycopg2 tuple row: datetime → ISO string, Decimal → float."""
+    if row is None:
+        return None
+    import decimal
+    result = []
+    for v in row:
+        if isinstance(v, (datetime.datetime, datetime.date)):
+            result.append(v.isoformat())
+        elif isinstance(v, decimal.Decimal):
+            result.append(float(v))
+        else:
+            result.append(v)
+    return tuple(result)
 
 
 class Database:
@@ -38,9 +55,9 @@ class Database:
                 cur.execute(sql, parameters)
                 data = None
                 if fetchone:
-                    data = cur.fetchone()
+                    data = _serialize_row(cur.fetchone())
                 elif fetchall:
-                    data = cur.fetchall()
+                    data = [_serialize_row(r) for r in cur.fetchall()]
                 if commit:
                     conn.commit()
                 return data

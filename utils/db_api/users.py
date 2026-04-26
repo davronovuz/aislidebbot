@@ -86,7 +86,7 @@ class UserDatabase(Database):
         r = self.execute(sql, parameters=(user_id,), fetchone=True)
         if r:
             return {
-                'plan_name': r[0], 'started_at': r[1], 'expires_at': r[2],
+                'plan_name': r[0], 'started_at': str(r[1]), 'expires_at': str(r[2]),
                 'presentations_used': r[3], 'courseworks_used': r[4],
                 'display_name': r[5], 'max_presentations': r[6],
                 'max_courseworks': r[7], 'max_slides': r[8], 'price': float(r[9]),
@@ -97,7 +97,7 @@ class UserDatabase(Database):
         r = self.execute(sql, parameters=(user_id,), fetchone=True)
         if r:
             return {
-                'plan_name': r[0], 'started_at': r[1], 'expires_at': r[2],
+                'plan_name': r[0], 'started_at': str(r[1]), 'expires_at': str(r[2]),
                 'presentations_used': r[3], 'courseworks_used': r[4],
                 'display_name': r[5], 'max_presentations': r[6],
                 'max_courseworks': r[7], 'max_slides': r[8], 'price': float(r[9]),
@@ -272,7 +272,7 @@ class UserDatabase(Database):
                 'balance': float(result[0]),
                 'total_spent': float(result[1]),
                 'total_deposited': float(result[2]),
-                'member_since': result[3]
+                'member_since': str(result[3])
             }
         return None
 
