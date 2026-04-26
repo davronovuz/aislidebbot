@@ -233,18 +233,17 @@ async def _generate_presentation_content(
     return await gen.generate_presentation_content(topic, details, slide_count, language=language)
 
 
-def _generate_pptx(content: dict, theme_id: str, slide_count: int) -> bytes:
+async def _generate_pptx_async(content: dict, theme_id: str) -> bytes:
     import sys, os
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
     from utils.pptx_generator import ProPPTXGenerator
-    import io
 
-    gen = ProPPTXGenerator(content, theme_id)
+    gen = ProPPTXGenerator(theme_id=theme_id)
     with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as f:
         tmp_path = f.name
 
     try:
-        gen.generate(tmp_path)
+        await gen.generate(content, tmp_path)
         with open(tmp_path, "rb") as f:
             return f.read()
     finally:
@@ -252,6 +251,10 @@ def _generate_pptx(content: dict, theme_id: str, slide_count: int) -> bytes:
             os.unlink(tmp_path)
         except OSError:
             pass
+
+
+def _generate_pptx(content: dict, theme_id: str, slide_count: int) -> bytes:
+    return _run(_generate_pptx_async(content, theme_id))
 
 
 async def _send_pptx_to_telegram(
