@@ -30,18 +30,11 @@ async def on_startup(dispatcher):
     logger.info("🚀 BOT ISHGA TUSHMOQDA...")
     logger.info("=" * 50)
 
-    # SQLite tables — still needed for channel_db (legacy, migration in progress)
     try:
-        user_db.create_table_users()
-        user_db.create_table_transactions()
-        user_db.create_table_pricing()
-        user_db.create_table_presentation_tasks()
-        user_db.create_table_subscriptions()
-        user_db.create_table_marketplace()
         channel_db.create_table_channels()
-        logger.info("✅ SQLite tables ready (legacy mode)")
+        logger.info("✅ Channel DB ready")
     except Exception as e:
-        logger.error(f"❌ SQLite setup error: {e}")
+        logger.error(f"❌ Channel DB setup error: {e}")
 
     dispatcher.middleware.setup(SubscriptionMiddleware())
     logger.info("✅ SubscriptionMiddleware attached")
