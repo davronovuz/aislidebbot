@@ -32,6 +32,11 @@ def sqlite_conn():
     return conn
 
 
+def rows_as_dicts(rows):
+    """Convert sqlite3.Row list to plain dicts so .get() works."""
+    return [dict(r) for r in rows]
+
+
 def pg_conn():
     return psycopg2.connect(PG_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
@@ -51,7 +56,7 @@ def ts(val) -> str | None:
 
 def migrate_users(sl, pg):
     log.info("Migrating users...")
-    rows = sl.execute("SELECT * FROM Users").fetchall()
+    rows = rows_as_dicts(sl.execute("SELECT * FROM Users").fetchall())
     count = 0
     with pg.cursor() as cur:
         for r in rows:
@@ -74,11 +79,11 @@ def migrate_users(sl, pg):
 
 def migrate_transactions(sl, pg):
     log.info("Migrating transactions...")
-    rows = sl.execute("""
+    rows = rows_as_dicts(sl.execute("""
         SELECT t.*, u.telegram_id
         FROM Transactions t
         JOIN Users u ON u.id = t.user_id
-    """).fetchall()
+    """).fetchall())
     count = 0
     with pg.cursor() as cur:
         for r in rows:
@@ -93,7 +98,7 @@ def migrate_transactions(sl, pg):
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """, (
                 user_id, r["transaction_type"], float(r["amount"]),
-                float(r.get("balance_before") or 0), float(r.get("balance_after") or 0),
+                float(r["balance_before"] or 0), float(r["balance_after"] or 0),
                 r["description"], r["receipt_file_id"], r["status"],
                 ts(r["created_at"]) or datetime.now(timezone.utc).isoformat(),
             ))
@@ -105,7 +110,7 @@ def migrate_transactions(sl, pg):
 def migrate_pricing(sl, pg):
     log.info("Migrating pricing...")
     try:
-        rows = sl.execute("SELECT * FROM Pricing").fetchall()
+        rows = rows_as_dicts(sl.execute("SELECT * FROM Pricing").fetchall())
     except Exception:
         log.info("  → no Pricing table in SQLite, skipping")
         return
@@ -129,12 +134,12 @@ def migrate_pricing(sl, pg):
 def migrate_tasks(sl, pg):
     log.info("Migrating presentation_tasks (completed only)...")
     try:
-        rows = sl.execute("""
+        rows = rows_as_dicts(sl.execute("""
             SELECT pt.*, u.telegram_id
             FROM PresentationTasks pt
             JOIN Users u ON u.id = pt.user_id
             WHERE pt.status = 'completed'
-        """).fetchall()
+        """).fetchall())
     except Exception:
         log.info("  → no PresentationTasks table in SQLite, skipping")
         return
@@ -169,7 +174,7 @@ def migrate_marketplace(sl, pg):
 
     # Templates
     try:
-        rows = sl.execute("SELECT * FROM Templates").fetchall()
+        rows = rows_as_dicts(sl.execute("SELECT * FROM Templates").fetchall())
         count = 0
         with pg.cursor() as cur:
             for r in rows:
@@ -194,7 +199,7 @@ def migrate_marketplace(sl, pg):
 
     # ReadyWorks
     try:
-        rows = sl.execute("SELECT * FROM ReadyWorks").fetchall()
+        rows = rows_as_dicts(sl.execute("SELECT * FROM ReadyWorks").fetchall())
         count = 0
         with pg.cursor() as cur:
             for r in rows:
@@ -223,7 +228,7 @@ def migrate_marketplace(sl, pg):
 def migrate_subscriptions(sl, pg):
     log.info("Migrating subscriptions...")
     try:
-        plans = sl.execute("SELECT * FROM SubscriptionPlans").fetchall()
+        plans = rows_as_dicts(sl.execute("SELECT * FROM SubscriptionPlans").fetchall())
         with pg.cursor() as cur:
             for p in plans:
                 cur.execute("""
@@ -241,12 +246,12 @@ def migrate_subscriptions(sl, pg):
                 ))
         pg.commit()
 
-        subs = sl.execute("""
+        subs = rows_as_dicts(sl.execute("""
             SELECT us.*, u.telegram_id
             FROM UserSubscriptions us
             JOIN Users u ON u.id = us.user_id
             WHERE us.is_active = 1
-        """).fetchall()
+        """).fetchall())
         with pg.cursor() as cur:
             for s in subs:
                 cur.execute("SELECT id FROM users WHERE telegram_id=%s", (s["telegram_id"],))
