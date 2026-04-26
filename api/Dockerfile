@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     fonts-freefont-ttf \
     libpangocairo-1.0-0 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps
