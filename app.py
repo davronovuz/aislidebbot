@@ -44,9 +44,8 @@ import handlers.users.admin_panel
 # ═══════════════════════════════════════════════════
 
 async def handle_submit_presentation(request):
-    """Frontend'dan pre-generated prezentatsiya kontentini qabul qilish"""
+    """Frontend'dan pre-generated prezentatsiya yoki hujjat kontentini qabul qilish"""
     try:
-        # Auth tekshirish
         auth = request.headers.get('Authorization', '')
         if auth != f'Bearer {API_SECRET}':
             return web.json_response({'error': 'Unauthorized'}, status=401)
@@ -56,13 +55,17 @@ async def handle_submit_presentation(request):
         if not telegram_id:
             return web.json_response({'error': 'telegram_id required'}, status=400)
 
+        # Document submission branch
+        if data.get('type') == 'document':
+            return await _handle_submit_document(telegram_id, data)
+
+        # Presentation branch
         topic = data.get('topic', 'Mavzusiz')
         details = data.get('details', '')
         slide_count = int(data.get('slide_count', 10))
         theme_id = data.get('theme_id', 'chisel')
         language = data.get('language', 'uz')
 
-        # To'lov tekshirish
         free_left = user_db.get_free_presentations(telegram_id)
         is_free = free_left > 0
 
@@ -91,7 +94,6 @@ async def handle_submit_presentation(request):
             )
             amount_charged = total_price
 
-        # Task yaratish
         task_uuid = str(uuid.uuid4())
         content_data = {
             'topic': topic, 'details': details,
@@ -99,7 +101,6 @@ async def handle_submit_presentation(request):
             'language': language
         }
 
-        # Pre-generated content
         if data.get('pre_generated') and data.get('slides'):
             content_data['pre_generated'] = True
             content_data['title'] = data.get('title', topic)
@@ -118,7 +119,6 @@ async def handle_submit_presentation(request):
                 user_db.add_to_balance(telegram_id, amount_charged)
             return web.json_response({'error': 'Task creation failed'}, status=500)
 
-        # Telegram xabar yuborish
         try:
             if is_free:
                 new_free = user_db.get_free_presentations(telegram_id)
@@ -140,7 +140,7 @@ async def handle_submit_presentation(request):
         except Exception as e:
             logger.warning(f"Telegram xabar yuborishda xato: {e}")
 
-        logger.info(f"✅ API prezentatsiya task: {task_uuid} | User: {telegram_id} | Pre-gen: {data.get('pre_generated', False)}")
+        logger.info(f"✅ API prezentatsiya task: {task_uuid} | User: {telegram_id}")
 
         return web.json_response({
             'ok': True,
@@ -151,6 +151,139 @@ async def handle_submit_presentation(request):
 
     except Exception as e:
         logger.error(f"❌ API submit xato: {e}")
+        return web.json_response({'error': str(e)}, status=500)
+
+
+async def _handle_submit_document(telegram_id: int, data: dict):
+    """Hujjat (kurs ishi, referat, va boshqalar) vazifasini qabul qilish"""
+    try:
+        work_type = data.get('work_type', 'mustaqil_ish')
+        work_name = data.get('work_name', 'Mustaqil ish')
+        topic = data.get('topic', 'Mavzusiz')
+        page_count = int(data.get('page_count', 10))
+        language = data.get('language', 'uz')
+
+        # Subscription tekshirish
+        sub = user_db.get_user_subscription(telegram_id)
+        is_sub_free = False
+        if sub and (sub['max_courseworks'] >= 999 or sub['max_courseworks'] > sub['courseworks_used']):
+            is_sub_free = True
+
+        if is_sub_free:
+            user_db.use_subscription_coursework(telegram_id)
+            amount_charged = 0
+        else:
+            price_per_page = user_db.get_price('page_basic') or 500.0
+            total_price = price_per_page * page_count
+            balance = user_db.get_user_balance(telegram_id)
+
+            if balance < total_price:
+                return web.json_response({
+                    'error': 'insufficient_balance',
+                    'required': total_price,
+                    'balance': balance
+                }, status=402)
+
+            success = user_db.deduct_from_balance(telegram_id, total_price)
+            if not success:
+                return web.json_response({'error': 'Balance deduction failed'}, status=500)
+
+            user_db.create_transaction(
+                telegram_id=telegram_id, transaction_type='withdrawal',
+                amount=total_price,
+                description=f'{work_name} ({page_count} sahifa)',
+                status='approved'
+            )
+            amount_charged = total_price
+
+        task_uuid = str(uuid.uuid4())
+        content_data = {
+            'work_type': work_type,
+            'work_name': work_name,
+            'topic': topic,
+            'subject_name': data.get('subject_name', ''),
+            'page_count': page_count,
+            'language': language,
+            'language_name': data.get('language_name', "O'zbekcha"),
+            'details': data.get('details', ''),
+            'file_format': data.get('file_format', 'docx'),
+            'student_name': data.get('student_name', ''),
+            'student_group': data.get('student_group', ''),
+            'teacher_name': data.get('teacher_name', ''),
+            'teacher_rank': data.get('teacher_rank', ''),
+            'university': data.get('university', ''),
+            'faculty': data.get('faculty', ''),
+        }
+
+        task_id = user_db.create_presentation_task(
+            telegram_id=telegram_id, task_uuid=task_uuid,
+            presentation_type='course_work', slide_count=page_count,
+            answers=json.dumps(content_data, ensure_ascii=False),
+            amount_charged=amount_charged
+        )
+
+        if not task_id:
+            if not is_sub_free and amount_charged > 0:
+                user_db.add_to_balance(telegram_id, amount_charged)
+            return web.json_response({'error': 'Task creation failed'}, status=500)
+
+        try:
+            if is_sub_free:
+                text = (
+                    f"⭐ <b>{work_name} boshlandi!</b>\n\n"
+                    f"📚 Mavzu: {topic}\n📄 Sahifalar: {page_count} ta\n\n"
+                    f"⏳ <b>2-5 daqiqa</b>. Tayyor bo'lgach DOCX yuboriladi!"
+                )
+            else:
+                new_balance = user_db.get_user_balance(telegram_id)
+                text = (
+                    f"✅ <b>{work_name} boshlandi!</b>\n\n"
+                    f"📚 Mavzu: {topic}\n📄 Sahifalar: {page_count} ta\n"
+                    f"💰 Yechildi: {amount_charged:,.0f} so'm\n💳 Balans: {new_balance:,.0f} so'm\n\n"
+                    f"⏳ <b>2-5 daqiqa</b>. Tayyor bo'lgach DOCX yuboriladi!"
+                )
+            await bot.send_message(telegram_id, text, parse_mode='HTML')
+        except Exception as e:
+            logger.warning(f"Telegram xabar yuborishda xato: {e}")
+
+        logger.info(f"✅ API hujjat task: {task_uuid} | User: {telegram_id} | Turi: {work_type}")
+
+        return web.json_response({
+            'ok': True,
+            'task_uuid': task_uuid,
+            'amount_charged': amount_charged,
+            'is_free': is_sub_free
+        })
+
+    except Exception as e:
+        logger.error(f"❌ _handle_submit_document xato: {e}")
+        return web.json_response({'error': str(e)}, status=500)
+
+
+async def handle_task_status(request):
+    """Task holati so'rovi — frontend tomonidan polling"""
+    try:
+        auth = request.headers.get('Authorization', '')
+        if auth != f'Bearer {API_SECRET}':
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+
+        task_uuid = request.match_info.get('uuid')
+        if not task_uuid:
+            return web.json_response({'error': 'uuid required'}, status=400)
+
+        task = user_db.get_task_by_uuid(task_uuid)
+        if not task:
+            return web.json_response({'error': 'Task not found'}, status=404)
+
+        return web.json_response({
+            'ok': True,
+            'task_uuid': task_uuid,
+            'status': task.get('status', 'pending'),
+            'progress': task.get('progress', 0),
+            'presentation_type': task.get('presentation_type'),
+        })
+    except Exception as e:
+        logger.error(f"❌ task-status xato: {e}")
         return web.json_response({'error': str(e)}, status=500)
 
 
@@ -167,6 +300,7 @@ async def start_api_server():
     global api_runner
     app = web.Application()
     app.router.add_post('/api/submit-presentation', handle_submit_presentation)
+    app.router.add_get('/api/task-status/{uuid}', handle_task_status)
     app.router.add_get('/api/health', handle_health)
 
     # CORS middleware
@@ -213,6 +347,7 @@ async def on_startup(dispatcher):
         user_db.create_table_pricing()
         user_db.create_table_presentation_tasks()
         user_db.create_business_plans_table()
+        user_db.create_table_subscriptions()
         channel_db.create_table_channels()
         logger.info("✅ Database jadvallari tayyor")
     except Exception as e:

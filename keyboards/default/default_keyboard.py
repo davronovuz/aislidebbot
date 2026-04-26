@@ -66,7 +66,7 @@ menu_ichki_kanal = ReplyKeyboardMarkup(
 
 # ==================== USER MENYULARI ====================
 
-WEB_APP_BASE_URL = "https://aislide-frontend.vercel.app/"
+WEB_APP_BASE_URL = "https://aislidebot-web.vercel.app/"
 
 
 def main_menu_keyboard(telegram_id=None, user_db=None):
