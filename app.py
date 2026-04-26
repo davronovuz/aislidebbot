@@ -260,6 +260,85 @@ async def _handle_submit_document(telegram_id: int, data: dict):
         return web.json_response({'error': str(e)}, status=500)
 
 
+async def handle_user_info(request):
+    """Foydalanuvchi ma'lumotlari — balans, obuna, statistika"""
+    try:
+        auth = request.headers.get('Authorization', '')
+        if auth != f'Bearer {API_SECRET}':
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+
+        telegram_id = request.rel_url.query.get('telegram_id')
+        if not telegram_id:
+            return web.json_response({'error': 'telegram_id required'}, status=400)
+        telegram_id = int(telegram_id)
+
+        stats = user_db.get_user_stats(telegram_id)
+        if not stats:
+            return web.json_response({'error': 'User not found'}, status=404)
+
+        free_left = user_db.get_free_presentations(telegram_id)
+        sub = user_db.get_user_subscription(telegram_id)
+        price_per_slide = user_db.get_price('slide_basic') or 500
+        price_per_page = user_db.get_price('page_basic') or 500
+
+        return web.json_response({
+            'ok': True,
+            'balance': stats['balance'],
+            'free_presentations': free_left,
+            'total_spent': stats['total_spent'],
+            'total_deposited': stats['total_deposited'],
+            'member_since': stats['member_since'],
+            'price_per_slide': price_per_slide,
+            'price_per_page': price_per_page,
+            'subscription': sub,
+        })
+    except Exception as e:
+        logger.error(f"❌ user-info xato: {e}")
+        return web.json_response({'error': str(e)}, status=500)
+
+
+async def handle_user_tasks(request):
+    """Foydalanuvchi buyurtmalari ro'yxati"""
+    try:
+        auth = request.headers.get('Authorization', '')
+        if auth != f'Bearer {API_SECRET}':
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+
+        telegram_id = request.rel_url.query.get('telegram_id')
+        if not telegram_id:
+            return web.json_response({'error': 'telegram_id required'}, status=400)
+        telegram_id = int(telegram_id)
+
+        limit = int(request.rel_url.query.get('limit', 20))
+        tasks = user_db.get_user_tasks(telegram_id, limit=limit)
+
+        return web.json_response({'ok': True, 'tasks': tasks})
+    except Exception as e:
+        logger.error(f"❌ user-tasks xato: {e}")
+        return web.json_response({'error': str(e)}, status=500)
+
+
+async def handle_user_transactions(request):
+    """Foydalanuvchi tranzaksiyalari"""
+    try:
+        auth = request.headers.get('Authorization', '')
+        if auth != f'Bearer {API_SECRET}':
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+
+        telegram_id = request.rel_url.query.get('telegram_id')
+        if not telegram_id:
+            return web.json_response({'error': 'telegram_id required'}, status=400)
+        telegram_id = int(telegram_id)
+
+        limit = int(request.rel_url.query.get('limit', 10))
+        transactions = user_db.get_user_transactions(telegram_id, limit=limit)
+
+        return web.json_response({'ok': True, 'transactions': transactions})
+    except Exception as e:
+        logger.error(f"❌ user-transactions xato: {e}")
+        return web.json_response({'error': str(e)}, status=500)
+
+
 async def handle_task_status(request):
     """Task holati so'rovi — frontend tomonidan polling"""
     try:
@@ -301,6 +380,9 @@ async def start_api_server():
     app = web.Application()
     app.router.add_post('/api/submit-presentation', handle_submit_presentation)
     app.router.add_get('/api/task-status/{uuid}', handle_task_status)
+    app.router.add_get('/api/user-info', handle_user_info)
+    app.router.add_get('/api/user-tasks', handle_user_tasks)
+    app.router.add_get('/api/user-transactions', handle_user_transactions)
     app.router.add_get('/api/health', handle_health)
 
     # CORS middleware
