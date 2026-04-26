@@ -1,21 +1,131 @@
 services:
+
+  # ─── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: aislide_postgres
+    environment:
+      POSTGRES_USER: aislide
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aislide_pg_2026}
+      POSTGRES_DB: aislide
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aislide"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: aislide_redis
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ─── Telegram bot (aiogram 2.x — notifications + file delivery) ──────────────
+
   bot:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: aislidebot
+    container_name: aislide_bot
+    env_file: .env
     environment:
-      - BOT_TOKEN=${BOT_TOKEN}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DATABASE_URL=postgresql://aislide:${POSTGRES_PASSWORD:-aislide_pg_2026}@postgres:5432/aislide
+      - REDIS_URL=redis://redis:6379/0
       - PRESENTON_URL=http://presenton:80
-      - PIXABAY_API_KEY=${PIXABAY_API_KEY:-}
     volumes:
       - ./data:/app/data
-    ports:
-      - "8081:8080"
     depends_on:
-      - presenton
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
+
+  # ─── FastAPI — HTTP API (port 8081 = same as before, Next.js unchanged) ───────
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: aislide_api
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://aislide:${POSTGRES_PASSWORD:-aislide_pg_2026}@postgres:5432/aislide
+      - DATABASE_URL_SYNC=postgresql://aislide:${POSTGRES_PASSWORD:-aislide_pg_2026}@postgres:5432/aislide
+      - REDIS_URL=redis://redis:6379/0
+      - PRESENTON_URL=http://presenton:80
+    ports:
+      - "8081:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ─── Dramatiq worker — presentation/document generation ──────────────────────
+
+  worker:
+    build:
+      context: .
+      dockerfile: api/Dockerfile.worker
+    container_name: aislide_worker
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://aislide:${POSTGRES_PASSWORD:-aislide_pg_2026}@postgres:5432/aislide
+      - DATABASE_URL_SYNC=postgresql://aislide:${POSTGRES_PASSWORD:-aislide_pg_2026}@postgres:5432/aislide
+      - REDIS_URL=redis://redis:6379/0
+      - PRESENTON_URL=http://presenton:80
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─── One-shot migration container (run manually) ─────────────────────────────
+
+  migrate:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: aislide_migrate
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://aislide:${POSTGRES_PASSWORD:-aislide_pg_2026}@postgres:5432/aislide
+      - DATABASE_URL_SYNC=postgresql://aislide:${POSTGRES_PASSWORD:-aislide_pg_2026}@postgres:5432/aislide
+    command: >
+      sh -c "alembic -c api/alembic.ini upgrade head &&
+             python scripts/migrate_sqlite_to_pg.py"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - migrate
+
+  # ─── Presenton (PPTX fallback service) ───────────────────────────────────────
 
   presenton:
     image: ghcr.io/presenton/presenton:latest
@@ -25,7 +135,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL=gpt-4o
       - IMAGE_PROVIDER=pixabay
-      - PIXABAY_API_KEY=55035509-1ebd34a223dc6250ad4e44b3c
+      - PIXABAY_API_KEY=${PIXABAY_API_KEY:-}
       - DISABLE_IMAGE_GENERATION=false
       - CAN_CHANGE_KEYS=false
       - DISABLE_ANONYMOUS_TELEMETRY=true
@@ -35,5 +145,8 @@ services:
       - "5000:80"
     restart: unless-stopped
 
+
 volumes:
+  postgres_data:
+  redis_data:
   presenton_data:
