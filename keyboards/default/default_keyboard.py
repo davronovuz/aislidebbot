@@ -98,10 +98,10 @@ def main_menu_keyboard(telegram_id=None, user_db=None):
     """
     if telegram_id:
         pres_url = WEB_APP_BASE_URL + f"?type=presentation&telegram_id={telegram_id}"
-        cw_url = WEB_APP_BASE_URL + f"?telegram_id={telegram_id}"
+        cw_url = WEB_APP_BASE_URL + f"?type=mustaqil_ish&telegram_id={telegram_id}"
     else:
         pres_url = WEB_APP_BASE_URL + "?type=presentation"
-        cw_url = WEB_APP_BASE_URL
+        cw_url = WEB_APP_BASE_URL + "?type=mustaqil_ish"
 
     if telegram_id and user_db:
         try:
