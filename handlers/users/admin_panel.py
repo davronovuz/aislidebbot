@@ -64,17 +64,12 @@ async def check_super_admin_permission(telegram_id: int) -> bool:
 
 
 async def check_admin_permission(telegram_id: int) -> bool:
-    """Oddiy admin tekshirish"""
+    """Oddiy admin tekshirish — schemada admins.telegram_id ishlatiladi."""
     logger.info(f"Admin tekshiruv: {telegram_id}")
-    user = user_db.select_user(telegram_id=telegram_id)
-    if not user:
-        logger.info(f"User topilmadi: {telegram_id}")
-        return False
-
-    user_id = user[0]  # Database'dagi user_id
-    is_admin = user_db.check_if_admin(user_id=user_id)
-    logger.info(f"User {user_id} admin: {is_admin}")
-    return is_admin
+    # Super admin (env ADMINS) ham admin sifatida hisoblanadi
+    if telegram_id in ADMINS:
+        return True
+    return user_db.check_if_admin(user_id=telegram_id)
 
 
 # ==================== NAVIGATION ====================
@@ -138,7 +133,7 @@ def get_admin_statistics() -> dict:
         # Processing va completed task'lar sonini olish
         all_tasks_query = """
             SELECT status, COUNT(*) as count
-            FROM PresentationTasks
+            FROM presentation_tasks
             WHERE status IN ('processing', 'completed')
             GROUP BY status
         """

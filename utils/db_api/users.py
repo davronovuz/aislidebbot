@@ -725,30 +725,35 @@ class UserDatabase(Database):
                             fetchone=True)[0]
 
     def add_admin(self, user_id: int, name: str, is_super_admin: bool = False):
+        # Schema uses telegram_id directly (no FK to users.id). The legacy
+        # parameter name 'user_id' is kept but treated as telegram_id.
         if not self.check_if_admin(user_id):
-            self.execute("INSERT INTO admins (user_id, name, is_super_admin) VALUES (?, ?, ?)",
-                         parameters=(user_id, name, is_super_admin), commit=True)
+            self.execute(
+                "INSERT INTO admins (telegram_id, name, is_super_admin) VALUES (?, ?, ?) "
+                "ON CONFLICT (telegram_id) DO NOTHING",
+                parameters=(user_id, name, is_super_admin), commit=True,
+            )
 
     def remove_admin(self, user_id: int):
-        self.execute("DELETE FROM admins WHERE user_id = ?", parameters=(user_id,), commit=True)
+        self.execute("DELETE FROM admins WHERE telegram_id = ?",
+                     parameters=(user_id,), commit=True)
 
     def get_all_admins(self):
-        sql = "SELECT admins.user_id, users.telegram_id, admins.name, admins.is_super_admin FROM admins JOIN users ON admins.user_id = users.id"
+        sql = "SELECT telegram_id, telegram_id, name, is_super_admin FROM admins"
         result = self.execute(sql, fetchall=True)
         if not result:
             return []
-        admins = []
-        for row in result:
-            admins.append({"user_id": row[0], "telegram_id": row[1], "name": row[2], "is_super_admin": row[3]})
-        return admins
+        return [{"user_id": r[0], "telegram_id": r[1], "name": r[2], "is_super_admin": r[3]}
+                for r in result]
 
     def check_if_admin(self, user_id: int) -> bool:
-        result = self.execute("SELECT 1 FROM admins WHERE user_id = ?", parameters=(user_id,), fetchone=True)
+        result = self.execute("SELECT 1 FROM admins WHERE telegram_id = ?",
+                              parameters=(user_id,), fetchone=True)
         return result is not None
 
     def update_admin_status(self, user_id: int, is_super_admin: bool):
-        self.execute("UPDATE Admins SET is_super_admin = ? WHERE user_id = ?", parameters=(is_super_admin, user_id),
-                     commit=True)
+        self.execute("UPDATE admins SET is_super_admin = ? WHERE telegram_id = ?",
+                     parameters=(is_super_admin, user_id), commit=True)
 
     # ==================== USERS_DB.PY GA QO'SHILADIGAN METODLAR ====================
     # Bu metodlarni utils/db/users_db.py fayliga qo'shing
