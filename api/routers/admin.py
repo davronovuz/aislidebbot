@@ -251,6 +251,64 @@ async def add_template(
     return {"ok": True, "template_id": t.id}
 
 
+@router.post("/marketplace/templates/upload")
+async def upload_template(
+    name: str = Form(...),
+    category: str = Form("general"),
+    price: float = Form(0.0),
+    colors: str = Form("linear-gradient(135deg,#ff6b35,#f7931e)"),
+    file: UploadFile = File(...),
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a PPTX file directly (multipart). Generates per-slide previews."""
+    from api.services import pptx_preview
+
+    if not file.filename or not file.filename.lower().endswith(".pptx"):
+        raise HTTPException(status_code=400, detail="Only .pptx files allowed")
+
+    file_bytes = await file.read()
+    if len(file_bytes) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (>50MB)")
+
+    # Step 1: Insert metadata to get template_id
+    t = Template(
+        name=name, category=category, slide_count=0,
+        price=price, colors=colors,
+        file_id="local",  # placeholder; will be filled with local path
+        is_premium=price > 0,
+    )
+    db.add(t)
+    await db.flush()
+    template_id = t.id
+
+    # Step 2: Save PPTX to disk
+    try:
+        pptx_path = pptx_preview.save_pptx(template_id, file_bytes)
+        # Step 3: Generate previews + extract text
+        previews = pptx_preview.generate_previews(template_id)
+        slides_text = pptx_preview.extract_slides_text(template_id)
+    except Exception as e:
+        logger.exception(f"Template upload {template_id} failed")
+        # Roll back by marking inactive
+        t.is_active = False
+        await db.flush()
+        raise HTTPException(status_code=500, detail=f"Preview generation failed: {e}")
+
+    # Step 4: Update template with real values
+    t.slide_count = len(previews) or len(slides_text) or 0
+    t.file_id = str(pptx_path)
+    t.preview_url = f"/api/templates/{template_id}/preview/1"  # first slide thumbnail
+    await db.flush()
+
+    return {
+        "ok": True,
+        "template_id": template_id,
+        "slide_count": t.slide_count,
+        "previews": previews,
+    }
+
+
 @router.post("/marketplace/works")
 async def add_ready_work(
     title: str = Form(...),
@@ -283,9 +341,14 @@ async def delete_template(
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    from api.services import pptx_preview
     await db.execute(
         update(Template).where(Template.id == template_id).values(is_active=False)
     )
+    try:
+        pptx_preview.delete_template_files(template_id)
+    except Exception:
+        pass
     return {"ok": True}
 
 

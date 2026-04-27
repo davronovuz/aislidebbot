@@ -67,6 +67,8 @@ services:
       - DATABASE_URL_SYNC=postgresql://aislide:${POSTGRES_PASSWORD:-aislide_pg_2026}@postgres:5432/aislide
       - REDIS_URL=redis://redis:6379/0
       - PRESENTON_URL=http://presenton:80
+    volumes:
+      - ./data:/app/data
     ports:
       - "8081:8000"
     depends_on:
@@ -95,6 +97,8 @@ services:
       - DATABASE_URL_SYNC=postgresql://aislide:${POSTGRES_PASSWORD:-aislide_pg_2026}@postgres:5432/aislide
       - REDIS_URL=redis://redis:6379/0
       - PRESENTON_URL=http://presenton:80
+    volumes:
+      - ./data:/app/data
     depends_on:
       postgres:
         condition: service_healthy

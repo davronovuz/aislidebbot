@@ -134,6 +134,38 @@ async def legacy_user_info(telegram_id: int, request: Request):
             return JSONResponse(status_code=404, content={"error": str(e)})
 
 
+@app.post("/api/resend-task")
+async def legacy_resend_task(request: Request):
+    """Re-send a completed task's file to the user via Telegram by file_id."""
+    from api.database import AsyncSessionLocal
+    from api.services.auth import verify_api_secret
+    from api.services.notification import send_document
+    from api.models.task import PresentationTask
+    from api.models.user import User
+    from sqlalchemy import select
+    if not verify_api_secret(request.headers.get("Authorization", "")):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    body = await request.json()
+    task_uuid = body.get("task_uuid")
+    telegram_id = body.get("telegram_id")
+    if not task_uuid or not telegram_id:
+        return JSONResponse(status_code=400, content={"error": "task_uuid and telegram_id required"})
+    async with AsyncSessionLocal() as db:
+        u = (await db.execute(select(User).where(User.telegram_id == telegram_id))).scalar_one_or_none()
+        if not u:
+            return JSONResponse(status_code=404, content={"error": "User not found"})
+        t = (await db.execute(
+            select(PresentationTask).where(
+                PresentationTask.task_uuid == task_uuid,
+                PresentationTask.user_id == u.id,
+            )
+        )).scalar_one_or_none()
+        if not t or not t.result_file_id:
+            return JSONResponse(status_code=404, content={"error": "File not found"})
+        ok = await send_document(telegram_id, t.result_file_id, "📎 Sizning faylingiz")
+        return JSONResponse({"ok": bool(ok)})
+
+
 @app.get("/api/user-tasks")
 async def legacy_user_tasks(telegram_id: int, request: Request, limit: int = 20):
     from api.database import AsyncSessionLocal
@@ -220,9 +252,121 @@ async def legacy_template_detail(template_id: int, request: Request):
     async with AsyncSessionLocal() as db:
         try:
             r = await get_template(template_id, None, db)
-            return JSONResponse({"ok": True, "template": r.model_dump()})
+            from api.services import pptx_preview
+            slides_text = pptx_preview.get_slides_data(template_id)
+            previews = pptx_preview.list_preview_files(template_id)
+            return JSONResponse({
+                "ok": True,
+                "template": r.model_dump(),
+                "slides_text": slides_text,
+                "preview_count": len(previews),
+            })
         except Exception as e:
             return JSONResponse(status_code=404, content={"error": str(e)})
+
+
+@app.get("/api/templates/{template_id}/preview/{slide_num}")
+async def template_preview_image(template_id: int, slide_num: int):
+    """Public: serve a slide preview PNG. No auth — these are intended for marketplace browsing."""
+    from fastapi.responses import FileResponse
+    from api.services import pptx_preview
+    p = pptx_preview.get_preview_path(template_id, slide_num)
+    if not p:
+        return JSONResponse(status_code=404, content={"error": "Preview not found"})
+    return FileResponse(str(p), media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.post("/api/admin/upload-template")
+async def legacy_admin_upload_template(request: Request):
+    """Admin uploads a PPTX template. Auth: API_SECRET + admin telegram_id check.
+
+    Multipart form fields:
+      file   — required (.pptx)
+      name, category, price, colors — metadata
+      telegram_id — admin's Telegram ID (must be in ADMINS env)
+    """
+    from api.services.auth import verify_api_secret
+    from api.config import get_settings
+    from api.database import AsyncSessionLocal
+    from api.services import pptx_preview
+    from api.models.marketplace import Template
+    from api.deps import require_api_secret  # noqa
+    if not verify_api_secret(request.headers.get("Authorization", "")):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    form = await request.form()
+    telegram_id = int(form.get("telegram_id") or 0)
+    settings = get_settings()
+    if telegram_id not in settings.admin_ids:
+        return JSONResponse(status_code=403, content={"error": "Not an admin"})
+
+    upload = form.get("file")
+    if not upload or not hasattr(upload, "filename"):
+        return JSONResponse(status_code=400, content={"error": "file is required"})
+    if not upload.filename.lower().endswith(".pptx"):
+        return JSONResponse(status_code=400, content={"error": "Only .pptx files allowed"})
+
+    file_bytes = await upload.read()
+    if len(file_bytes) > 50 * 1024 * 1024:
+        return JSONResponse(status_code=400, content={"error": "File too large (>50MB)"})
+
+    name = (form.get("name") or upload.filename).strip()
+    category = (form.get("category") or "general").strip()
+    price = float(form.get("price") or 0)
+    colors = (form.get("colors") or "linear-gradient(135deg,#ff6b35,#f7931e)").strip()
+
+    async with AsyncSessionLocal() as db:
+        t = Template(
+            name=name, category=category, slide_count=0,
+            price=price, colors=colors, file_id="local",
+            is_premium=price > 0,
+        )
+        db.add(t)
+        await db.flush()
+        template_id = t.id
+
+        try:
+            pptx_path = pptx_preview.save_pptx(template_id, file_bytes)
+            previews = pptx_preview.generate_previews(template_id)
+            slides_text = pptx_preview.extract_slides_text(template_id)
+        except Exception as e:
+            t.is_active = False
+            await db.commit()
+            return JSONResponse(status_code=500, content={"error": f"Preview failed: {e}"})
+
+        t.slide_count = len(previews) or len(slides_text) or 0
+        t.file_id = str(pptx_path)
+        t.preview_url = f"/api/templates/{template_id}/preview/1"
+        await db.commit()
+
+    return JSONResponse({
+        "ok": True,
+        "template_id": template_id,
+        "slide_count": len(previews),
+        "previews": previews,
+    })
+
+
+@app.delete("/api/admin/templates/{template_id}")
+async def legacy_admin_delete_template(template_id: int, telegram_id: int, request: Request):
+    from api.services.auth import verify_api_secret
+    from api.config import get_settings
+    from api.database import AsyncSessionLocal
+    from api.services import pptx_preview
+    from api.models.marketplace import Template
+    from sqlalchemy import update
+    if not verify_api_secret(request.headers.get("Authorization", "")):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    if telegram_id not in get_settings().admin_ids:
+        return JSONResponse(status_code=403, content={"error": "Not an admin"})
+    async with AsyncSessionLocal() as db:
+        await db.execute(update(Template).where(Template.id == template_id).values(is_active=False))
+        await db.commit()
+    try:
+        pptx_preview.delete_template_files(template_id)
+    except Exception:
+        pass
+    return JSONResponse({"ok": True})
 
 
 @app.get("/api/ready-works")

@@ -2,9 +2,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# System deps: LibreOffice for PDF conversion, fonts
+# System deps: LibreOffice for PDF conversion, poppler-utils for pdftoppm
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice \
+    poppler-utils \
     fonts-liberation \
     fonts-freefont-ttf \
     libpangocairo-1.0-0 \
