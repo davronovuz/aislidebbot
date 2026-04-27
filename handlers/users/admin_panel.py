@@ -1616,7 +1616,7 @@ async def add_work_file(message: types.Message, state: FSMContext):
     if not (fname.endswith('.pdf') or fname.endswith('.docx') or fname.endswith('.doc') or fname.endswith('.pptx')):
         await message.answer("⚠️ Faqat PDF, DOCX yoki PPTX fayl yuboring!")
         return
-    await state.update_data(file_id=doc.file_id)
+    await state.update_data(file_id=doc.file_id, orig_filename=doc.file_name)
     await message.answer("📝 Ish sarlavhasini kiriting:")
     await AdminStates.WorkTitle.set()
 
@@ -1704,8 +1704,10 @@ async def add_work_description(message: types.Message, state: FSMContext):
 
 async def _save_ready_work(message: types.Message, state: FSMContext, description: str):
     data = await state.get_data()
+    progress_msg = None
     try:
-        user_db.add_ready_work(
+        # 1. Insert DB row first to get work_id
+        work_id = user_db.add_ready_work(
             title=data['title'],
             subject=data['subject'],
             work_type=data['work_type'],
@@ -1715,17 +1717,48 @@ async def _save_ready_work(message: types.Message, state: FSMContext, descriptio
             description=description,
             preview_file_id=data.get('preview_file_id'),
         )
+
+        # 2. Download original file from Telegram → local storage → generate previews
+        progress_msg = await message.answer("⏳ Fayl yuklanmoqda va preview tayyorlanmoqda...")
+        try:
+            from utils.telegram_file_helper import download_to_local_and_make_preview
+            local_path, page_count = await download_to_local_and_make_preview(
+                bot, work_id, data['file_id'], data.get('orig_filename', ''),
+            )
+            # Update DB: file_id → local path, preview_available
+            if local_path:
+                user_db.execute(
+                    "UPDATE ready_works SET file_id = ?, preview_available = ? WHERE id = ?",
+                    parameters=(local_path, page_count > 0, work_id),
+                    commit=True,
+                )
+        except Exception as e:
+            logger.error(f"Preview generation failed for work {work_id}: {e}")
+            page_count = 0
+
         label = WORK_TYPE_LABELS.get(data['work_type'], data['work_type'])
+        preview_text = (
+            f"🖼 Preview: {page_count} ta sahifa tayyorlandi\n" if page_count > 0
+            else "⚠️ Preview yaratilmadi (lekin ish saqlandi)\n"
+        )
+        try:
+            if progress_msg:
+                await progress_msg.delete()
+        except Exception:
+            pass
+
         await message.answer(
             f"✅ Tayyor ish qo'shildi!\n\n"
             f"📝 Sarlavha: {data['title']}\n"
             f"📂 Tur: {label}\n"
             f"📚 Fan: {data['subject']}\n"
             f"📄 Sahifalar: {data['page_count']}\n"
-            f"💰 Narx: {data['price']:,.0f} so'm",
+            f"💰 Narx: {data['price']:,.0f} so'm\n"
+            f"{preview_text}",
             reply_markup=menu_ichki_bozor
         )
     except Exception as e:
+        logger.exception("Tayyor ish saqlashda xato")
         await message.answer(f"❌ Xato: {e}", reply_markup=menu_ichki_bozor)
     await state.finish()
 
