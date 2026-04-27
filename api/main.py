@@ -390,8 +390,8 @@ async def legacy_admin_upload_work(request: Request):
         return JSONResponse(status_code=400, content={"error": "file is required"})
 
     fname = upload.filename.lower()
-    if not (fname.endswith(".docx") or fname.endswith(".pdf")):
-        return JSONResponse(status_code=400, content={"error": "Only .docx or .pdf files"})
+    if not (fname.endswith(".docx") or fname.endswith(".pdf") or fname.endswith(".pptx")):
+        return JSONResponse(status_code=400, content={"error": "Only .docx, .pdf or .pptx files"})
 
     file_bytes = await upload.read()
     if len(file_bytes) > 50 * 1024 * 1024:
@@ -405,7 +405,12 @@ async def legacy_admin_upload_work(request: Request):
     language = (form.get("language") or "uz").strip()
     description = (form.get("description") or "").strip()
 
-    ext = "docx" if fname.endswith(".docx") else "pdf"
+    if fname.endswith(".docx"):
+        ext = "docx"
+    elif fname.endswith(".pptx"):
+        ext = "pptx"
+    else:
+        ext = "pdf"
 
     async with AsyncSessionLocal() as db:
         w = ReadyWork(

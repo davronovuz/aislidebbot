@@ -29,14 +29,14 @@ def _run(cmd: list[str], timeout: int = 180) -> tuple[int, str, str]:
 
 
 def generate_preview(work_id: int) -> str | None:
-    """Make a first-page PNG preview. Works with DOCX (via PDF) or PDF.
+    """Make a first-page PNG preview. Works with DOCX, PDF or PPTX.
     Returns the preview filename or None on failure.
     """
     d = work_dir(work_id)
 
     # Find original file
     candidates = list(d.glob("work.*"))
-    candidates = [p for p in candidates if p.suffix.lower() in (".docx", ".pdf")]
+    candidates = [p for p in candidates if p.suffix.lower() in (".docx", ".pdf", ".pptx", ".doc")]
     if not candidates:
         return None
     src = candidates[0]
@@ -48,7 +48,7 @@ def generate_preview(work_id: int) -> str | None:
         if old != src:
             old.unlink()
 
-    # Get a PDF: convert DOCX → PDF if needed
+    # Get a PDF: convert DOCX/PPTX → PDF if needed
     if src.suffix.lower() == ".pdf":
         pdf_path = src
     else:
@@ -94,7 +94,7 @@ def get_preview_path(work_id: int) -> Path | None:
 
 def get_file_path(work_id: int) -> Path | None:
     d = work_dir(work_id)
-    for ext in ("docx", "pdf"):
+    for ext in ("docx", "pdf", "pptx", "doc"):
         p = d / f"work.{ext}"
         if p.exists():
             return p

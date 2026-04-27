@@ -1601,7 +1601,7 @@ async def add_work_start(message: types.Message):
     if not await check_admin_permission(message.from_user.id):
         return
     await message.answer(
-        "📎 Tayyor ish faylini yuboring (PDF yoki DOCX):",
+        "📎 Tayyor ish faylini yuboring (PDF, DOCX yoki PPTX):",
         reply_markup=types.ReplyKeyboardMarkup(
             keyboard=[[types.KeyboardButton("❌ Bekor qilish")]], resize_keyboard=True
         )
@@ -1613,8 +1613,8 @@ async def add_work_start(message: types.Message):
 async def add_work_file(message: types.Message, state: FSMContext):
     doc = message.document
     fname = doc.file_name.lower()
-    if not (fname.endswith('.pdf') or fname.endswith('.docx') or fname.endswith('.doc')):
-        await message.answer("⚠️ Faqat PDF yoki DOCX fayl yuboring!")
+    if not (fname.endswith('.pdf') or fname.endswith('.docx') or fname.endswith('.doc') or fname.endswith('.pptx')):
+        await message.answer("⚠️ Faqat PDF, DOCX yoki PPTX fayl yuboring!")
         return
     await state.update_data(file_id=doc.file_id)
     await message.answer("📝 Ish sarlavhasini kiriting:")
