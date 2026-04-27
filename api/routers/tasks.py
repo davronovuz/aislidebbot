@@ -81,24 +81,14 @@ async def submit_task(
         return await _handle_ready_work_purchase(body, user, db, task_uuid)
 
     if body.type == "document":
+        # Document — free tier disabled, always charge.
         page_count = body.page_count
-        # Subscription check
-        sub_result = await db.execute(
-            select(UserSubscription).where(
-                UserSubscription.user_id == user.id, UserSubscription.is_active.is_(True)
-            )
-        )
-        sub = sub_result.scalar_one_or_none()
-        if sub and (sub.max_courseworks >= 999 or sub.courseworks_used < sub.max_courseworks):
-            sub.courseworks_used += 1
-            is_free = True
-        else:
-            price_per_page = await _get_price(db, "page_basic", 500.0)
-            total = price_per_page * page_count
-            ok = await _deduct_balance(db, user, total, f"{body.work_name} ({page_count} sahifa)")
-            if not ok:
-                raise HTTPException(status_code=402, detail="insufficient_balance")
-            amount_charged = total
+        price_per_page = await _get_price(db, "page_basic", 500.0)
+        total = price_per_page * page_count
+        ok = await _deduct_balance(db, user, total, f"{body.work_name} ({page_count} sahifa)")
+        if not ok:
+            raise HTTPException(status_code=402, detail="insufficient_balance")
+        amount_charged = total
 
         content_data = {
             "work_type": body.work_type, "work_name": body.work_name,
