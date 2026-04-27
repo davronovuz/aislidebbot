@@ -427,20 +427,20 @@ async def legacy_admin_upload_work(request: Request):
 
         try:
             file_path = work_preview.save_file(work_id, file_bytes, ext)
-            preview_name = work_preview.generate_preview(work_id)
+            page_count = work_preview.generate_preview(work_id)
         except Exception as e:
             w.is_active = False
             await db.commit()
             return JSONResponse(status_code=500, content={"error": f"Preview failed: {e}"})
 
         w.file_id = str(file_path)
-        w.preview_available = preview_name is not None
+        w.preview_available = page_count > 0
         await db.commit()
 
     return JSONResponse({
         "ok": True,
         "work_id": work_id,
-        "preview": preview_name,
+        "preview_pages": page_count,
     })
 
 
@@ -477,6 +477,32 @@ async def work_preview_image(work_id: int):
     return FileResponse(str(p), media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
+@app.get("/api/works/{work_id}/page/{page_num}")
+async def work_page_image(work_id: int, page_num: int):
+    """Public: serve a specific page PNG (1-based)."""
+    from fastapi.responses import FileResponse
+    from api.services import work_preview
+    p = work_preview.get_page_path(work_id, page_num)
+    if not p:
+        return JSONResponse(status_code=404, content={"error": "Page not found"})
+    return FileResponse(str(p), media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.post("/api/admin/works/{work_id}/regenerate-preview")
+async def legacy_admin_regenerate_work_preview(work_id: int, telegram_id: int, request: Request):
+    """Re-generate per-page previews for an existing work. Useful after upgrading
+    the preview pipeline (e.g. single-page → multi-page)."""
+    from api.services.auth import verify_api_secret
+    from api.config import get_settings
+    from api.services import work_preview
+    if not verify_api_secret(request.headers.get("Authorization", "")):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    if telegram_id not in get_settings().admin_ids:
+        return JSONResponse(status_code=403, content={"error": "Not an admin"})
+    count = work_preview.generate_preview(work_id)
+    return JSONResponse({"ok": True, "page_count": count})
+
+
 @app.get("/api/ready-works")
 async def legacy_works(request: Request, q: str = "", type: str = ""):
     from api.routers.marketplace import list_works
@@ -496,12 +522,18 @@ async def legacy_work_detail(work_id: int, request: Request):
     from api.schemas.marketplace import ReadyWorkDetail
     from api.database import AsyncSessionLocal
     from api.services.auth import verify_api_secret
+    from api.services import work_preview
     if not verify_api_secret(request.headers.get("Authorization", "")):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
     async with AsyncSessionLocal() as db:
         try:
             r = await get_work(work_id, None, db)
-            return JSONResponse({"ok": True, "work": ReadyWorkDetail.model_validate(r).model_dump(mode="json")})
+            pages = work_preview.list_page_files(work_id)
+            return JSONResponse({
+                "ok": True,
+                "work": ReadyWorkDetail.model_validate(r).model_dump(mode="json"),
+                "preview_count": len(pages),
+            })
         except Exception as e:
             return JSONResponse(status_code=404, content={"error": str(e)})
 
