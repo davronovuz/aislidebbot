@@ -233,18 +233,20 @@ async def legacy_user_transactions(telegram_id: int, request: Request, limit: in
 @app.get("/api/templates")
 async def legacy_templates(request: Request, category: str = ""):
     from api.routers.marketplace import list_templates
+    from api.schemas.marketplace import TemplateOut
     from api.database import AsyncSessionLocal
     from api.services.auth import verify_api_secret
     if not verify_api_secret(request.headers.get("Authorization", "")):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
     async with AsyncSessionLocal() as db:
         rows = await list_templates(category, None, db)
-        return JSONResponse({"ok": True, "templates": [r.model_dump() for r in rows]})
+        return JSONResponse({"ok": True, "templates": [TemplateOut.model_validate(r).model_dump() for r in rows]})
 
 
 @app.get("/api/templates/{template_id}")
 async def legacy_template_detail(template_id: int, request: Request):
     from api.routers.marketplace import get_template
+    from api.schemas.marketplace import TemplateDetail
     from api.database import AsyncSessionLocal
     from api.services.auth import verify_api_secret
     if not verify_api_secret(request.headers.get("Authorization", "")):
@@ -257,7 +259,7 @@ async def legacy_template_detail(template_id: int, request: Request):
             previews = pptx_preview.list_preview_files(template_id)
             return JSONResponse({
                 "ok": True,
-                "template": r.model_dump(),
+                "template": TemplateDetail.model_validate(r).model_dump(mode="json"),
                 "slides_text": slides_text,
                 "preview_count": len(previews),
             })
@@ -478,18 +480,20 @@ async def work_preview_image(work_id: int):
 @app.get("/api/ready-works")
 async def legacy_works(request: Request, q: str = "", type: str = ""):
     from api.routers.marketplace import list_works
+    from api.schemas.marketplace import ReadyWorkOut
     from api.database import AsyncSessionLocal
     from api.services.auth import verify_api_secret
     if not verify_api_secret(request.headers.get("Authorization", "")):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
     async with AsyncSessionLocal() as db:
         rows = await list_works(q, type, None, db)
-        return JSONResponse({"ok": True, "works": [r.model_dump() for r in rows]})
+        return JSONResponse({"ok": True, "works": [ReadyWorkOut.model_validate(r).model_dump() for r in rows]})
 
 
 @app.get("/api/ready-works/{work_id}")
 async def legacy_work_detail(work_id: int, request: Request):
     from api.routers.marketplace import get_work
+    from api.schemas.marketplace import ReadyWorkDetail
     from api.database import AsyncSessionLocal
     from api.services.auth import verify_api_secret
     if not verify_api_secret(request.headers.get("Authorization", "")):
@@ -497,7 +501,7 @@ async def legacy_work_detail(work_id: int, request: Request):
     async with AsyncSessionLocal() as db:
         try:
             r = await get_work(work_id, None, db)
-            return JSONResponse({"ok": True, "work": r.model_dump()})
+            return JSONResponse({"ok": True, "work": ReadyWorkDetail.model_validate(r).model_dump(mode="json")})
         except Exception as e:
             return JSONResponse(status_code=404, content={"error": str(e)})
 
