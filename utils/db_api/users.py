@@ -217,15 +217,13 @@ class UserDatabase(Database):
     def add_user(self, telegram_id: int, username: str, created_at=None):
         if created_at is None:
             created_at = datetime.now().isoformat()
+        # No free presentations on signup — feature disabled.
         sql = """
         INSERT INTO users (telegram_id, username, free_presentations, created_at)
-        VALUES (?, ?, 1, ?)
+        VALUES (?, ?, 0, ?)
         ON CONFLICT (telegram_id) DO UPDATE SET username = EXCLUDED.username
         """
         self.execute(sql, parameters=(telegram_id, username, created_at), commit=True)
-        # Bepul obuna yo'q bo'lsa berish
-        if not self.get_user_subscription(telegram_id):
-            self.activate_subscription(telegram_id, 'free')
 
     def get_user_id(self, telegram_id: int) -> Optional[int]:
         sql = "SELECT id FROM users WHERE telegram_id = ?"

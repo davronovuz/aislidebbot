@@ -251,35 +251,30 @@ async def _handle_presentation_web_data(message: types.Message, data: dict):
     theme_id = data.get('theme_id', 'chisel')
 
     try:
-        free_left = user_db.get_free_presentations(telegram_id)
-        is_free = free_left > 0
+        # Free tier disabled — always charge.
+        is_free = False
+        price_per_slide = user_db.get_price('slide_basic') or 2000.0
+        total_price = price_per_slide * slide_count
+        balance = user_db.get_user_balance(telegram_id)
 
-        if is_free:
-            user_db.use_free_presentation(telegram_id)
-            amount_charged = 0
-        else:
-            price_per_slide = user_db.get_price('slide_basic') or 2000.0
-            total_price = price_per_slide * slide_count
-            balance = user_db.get_user_balance(telegram_id)
-
-            if balance < total_price:
-                await message.answer(
-                    f"❌ <b>Balans yetarli emas!</b>\n\n"
-                    f"Kerakli: {total_price:,.0f} so'm\nSizda: {balance:,.0f} so'm",
-                    parse_mode='HTML', reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db)
-                )
-                return
-
-            success = user_db.deduct_from_balance(telegram_id, total_price)
-            if not success:
-                await message.answer("❌ Balansdan yechishda xatolik!", reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db))
-                return
-
-            user_db.create_transaction(
-                telegram_id=telegram_id, transaction_type='withdrawal',
-                amount=total_price, description=f'Prezentatsiya ({slide_count} slayd)', status='approved'
+        if balance < total_price:
+            await message.answer(
+                f"❌ <b>Balans yetarli emas!</b>\n\n"
+                f"Kerakli: {total_price:,.0f} so'm\nSizda: {balance:,.0f} so'm",
+                parse_mode='HTML', reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db)
             )
-            amount_charged = total_price
+            return
+
+        success = user_db.deduct_from_balance(telegram_id, total_price)
+        if not success:
+            await message.answer("❌ Balansdan yechishda xatolik!", reply_markup=main_menu_keyboard(telegram_id=telegram_id, user_db=user_db))
+            return
+
+        user_db.create_transaction(
+            telegram_id=telegram_id, transaction_type='withdrawal',
+            amount=total_price, description=f'Prezentatsiya ({slide_count} slayd)', status='approved'
+        )
+        amount_charged = total_price
 
         task_uuid = str(uuid.uuid4())
         language = data.get('language', 'uz')

@@ -118,18 +118,14 @@ async def submit_task(
         )
 
     else:
-        # Presentation
+        # Presentation — free tier disabled, always charge.
         slide_count = body.slide_count
-        if user.free_presentations > 0:
-            user.free_presentations -= 1
-            is_free = True
-        else:
-            price_per_slide = await _get_price(db, "slide_basic", 1000.0)
-            total = price_per_slide * slide_count
-            ok = await _deduct_balance(db, user, total, f"Prezentatsiya ({slide_count} slayd)")
-            if not ok:
-                raise HTTPException(status_code=402, detail="insufficient_balance")
-            amount_charged = total
+        price_per_slide = await _get_price(db, "slide_basic", 1000.0)
+        total = price_per_slide * slide_count
+        ok = await _deduct_balance(db, user, total, f"Prezentatsiya ({slide_count} slayd)")
+        if not ok:
+            raise HTTPException(status_code=402, detail="insufficient_balance")
+        amount_charged = total
 
         content_data = {
             "topic": body.topic or "Mavzusiz", "details": body.details,
