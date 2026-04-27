@@ -134,6 +134,70 @@ async def legacy_user_info(telegram_id: int, request: Request):
             return JSONResponse(status_code=404, content={"error": str(e)})
 
 
+@app.get("/api/user-tasks")
+async def legacy_user_tasks(telegram_id: int, request: Request, limit: int = 20):
+    from api.database import AsyncSessionLocal
+    from api.services.auth import verify_api_secret
+    from api.models.task import PresentationTask
+    from api.models.user import User
+    from sqlalchemy import select, desc
+    if not verify_api_secret(request.headers.get("Authorization", "")):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    async with AsyncSessionLocal() as db:
+        u = (await db.execute(select(User).where(User.telegram_id == telegram_id))).scalar_one_or_none()
+        if not u:
+            return JSONResponse({"ok": True, "tasks": []})
+        rows = (await db.execute(
+            select(PresentationTask)
+            .where(PresentationTask.user_id == u.id)
+            .order_by(desc(PresentationTask.created_at))
+            .limit(limit)
+        )).scalars().all()
+        return JSONResponse({"ok": True, "tasks": [
+            {
+                "task_uuid": t.task_uuid,
+                "type": t.presentation_type,
+                "slide_count": t.slide_count,
+                "status": t.status,
+                "progress": t.progress or 0,
+                "amount_charged": float(t.amount_charged or 0),
+                "result_file_id": t.result_file_id,
+                "error_message": t.error_message,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            } for t in rows
+        ]})
+
+
+@app.get("/api/user-transactions")
+async def legacy_user_transactions(telegram_id: int, request: Request, limit: int = 20):
+    from api.database import AsyncSessionLocal
+    from api.services.auth import verify_api_secret
+    from api.models.user import User, Transaction
+    from sqlalchemy import select, desc
+    if not verify_api_secret(request.headers.get("Authorization", "")):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    async with AsyncSessionLocal() as db:
+        u = (await db.execute(select(User).where(User.telegram_id == telegram_id))).scalar_one_or_none()
+        if not u:
+            return JSONResponse({"ok": True, "transactions": []})
+        rows = (await db.execute(
+            select(Transaction)
+            .where(Transaction.user_id == u.id)
+            .order_by(desc(Transaction.created_at))
+            .limit(limit)
+        )).scalars().all()
+        return JSONResponse({"ok": True, "transactions": [
+            {
+                "id": t.id,
+                "type": t.transaction_type,
+                "amount": float(t.amount),
+                "description": t.description or "",
+                "status": t.status,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            } for t in rows
+        ]})
+
+
 @app.get("/api/templates")
 async def legacy_templates(request: Request, category: str = ""):
     from api.routers.marketplace import list_templates
