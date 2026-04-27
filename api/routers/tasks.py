@@ -69,7 +69,7 @@ async def submit_task(
     user = result.scalar_one_or_none()
     if not user:
         # Auto-create user on first submit (bot users may not have authed via JWT)
-        user = User(telegram_id=telegram_id, free_presentations=1)
+        user = User(telegram_id=telegram_id, free_presentations=0)
         db.add(user)
         await db.flush()
 

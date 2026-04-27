@@ -16,7 +16,7 @@ class User(Base):
     first_name: Mapped[str | None] = mapped_column(String(255))
     last_name: Mapped[str | None] = mapped_column(String(255))
     balance: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
-    free_presentations: Mapped[int] = mapped_column(Integer, default=1)
+    free_presentations: Mapped[int] = mapped_column(Integer, default=0)
     total_spent: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
     total_deposited: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
