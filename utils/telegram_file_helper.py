@@ -24,10 +24,28 @@ def _ext_from_filename(fname: str) -> str:
 
 
 async def _download_file(bot, file_id: str, target: Path) -> bool:
+    """Download Telegram file via direct HTTPS to bypass aiogram 2.x destination
+    handling (which produced empty/zeroed files in our environment)."""
+    import httpx
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
-        await bot.download_file_by_id(file_id, str(target))
-        return target.exists() and target.stat().st_size > 0
+        # Get file_path from Telegram
+        file = await bot.get_file(file_id)
+        file_path = file.file_path
+        token = getattr(bot, "_token", None) or getattr(bot, "token", None)
+        if not token:
+            logger.error("bot token not accessible")
+            return False
+        url = f"https://api.telegram.org/file/bot{token}/{file_path}"
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            async with client.stream("GET", url) as r:
+                r.raise_for_status()
+                with open(target, "wb") as f:
+                    async for chunk in r.aiter_bytes(chunk_size=64 * 1024):
+                        f.write(chunk)
+        size = target.stat().st_size
+        logger.info(f"Downloaded {size} bytes → {target}")
+        return size > 0
     except Exception as e:
         logger.error(f"Telegram download failed for {file_id}: {e}")
         return False
