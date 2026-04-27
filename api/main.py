@@ -369,6 +369,107 @@ async def legacy_admin_delete_template(template_id: int, telegram_id: int, reque
     return JSONResponse({"ok": True})
 
 
+@app.post("/api/admin/upload-work")
+async def legacy_admin_upload_work(request: Request):
+    """Admin uploads a ready work (DOCX/PDF). Generates first-page preview."""
+    from api.services.auth import verify_api_secret
+    from api.config import get_settings
+    from api.database import AsyncSessionLocal
+    from api.services import work_preview
+    from api.models.marketplace import ReadyWork
+    if not verify_api_secret(request.headers.get("Authorization", "")):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    form = await request.form()
+    telegram_id = int(form.get("telegram_id") or 0)
+    if telegram_id not in get_settings().admin_ids:
+        return JSONResponse(status_code=403, content={"error": "Not an admin"})
+
+    upload = form.get("file")
+    if not upload or not hasattr(upload, "filename"):
+        return JSONResponse(status_code=400, content={"error": "file is required"})
+
+    fname = upload.filename.lower()
+    if not (fname.endswith(".docx") or fname.endswith(".pdf")):
+        return JSONResponse(status_code=400, content={"error": "Only .docx or .pdf files"})
+
+    file_bytes = await upload.read()
+    if len(file_bytes) > 50 * 1024 * 1024:
+        return JSONResponse(status_code=400, content={"error": "File too large (>50MB)"})
+
+    title = (form.get("title") or upload.filename).strip()
+    subject = (form.get("subject") or "").strip()
+    work_type = (form.get("work_type") or "mustaqil_ish").strip()
+    page_count = int(form.get("page_count") or 10)
+    price = float(form.get("price") or 0)
+    language = (form.get("language") or "uz").strip()
+    description = (form.get("description") or "").strip()
+
+    ext = "docx" if fname.endswith(".docx") else "pdf"
+
+    async with AsyncSessionLocal() as db:
+        w = ReadyWork(
+            title=title, subject=subject, work_type=work_type,
+            page_count=page_count, price=price, language=language,
+            description=description, file_id="local",
+            preview_available=False,
+        )
+        db.add(w)
+        await db.flush()
+        work_id = w.id
+
+        try:
+            file_path = work_preview.save_file(work_id, file_bytes, ext)
+            preview_name = work_preview.generate_preview(work_id)
+        except Exception as e:
+            w.is_active = False
+            await db.commit()
+            return JSONResponse(status_code=500, content={"error": f"Preview failed: {e}"})
+
+        w.file_id = str(file_path)
+        w.preview_available = preview_name is not None
+        await db.commit()
+
+    return JSONResponse({
+        "ok": True,
+        "work_id": work_id,
+        "preview": preview_name,
+    })
+
+
+@app.delete("/api/admin/works/{work_id}")
+async def legacy_admin_delete_work(work_id: int, telegram_id: int, request: Request):
+    from api.services.auth import verify_api_secret
+    from api.config import get_settings
+    from api.database import AsyncSessionLocal
+    from api.services import work_preview
+    from api.models.marketplace import ReadyWork
+    from sqlalchemy import update
+    if not verify_api_secret(request.headers.get("Authorization", "")):
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    if telegram_id not in get_settings().admin_ids:
+        return JSONResponse(status_code=403, content={"error": "Not an admin"})
+    async with AsyncSessionLocal() as db:
+        await db.execute(update(ReadyWork).where(ReadyWork.id == work_id).values(is_active=False))
+        await db.commit()
+    try:
+        work_preview.delete_work_files(work_id)
+    except Exception:
+        pass
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/works/{work_id}/preview")
+async def work_preview_image(work_id: int):
+    """Public: serve first-page preview PNG."""
+    from fastapi.responses import FileResponse
+    from api.services import work_preview
+    p = work_preview.get_preview_path(work_id)
+    if not p:
+        return JSONResponse(status_code=404, content={"error": "Preview not found"})
+    return FileResponse(str(p), media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+
 @app.get("/api/ready-works")
 async def legacy_works(request: Request, q: str = "", type: str = ""):
     from api.routers.marketplace import list_works

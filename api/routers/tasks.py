@@ -162,7 +162,8 @@ async def submit_task(
 
 async def _handle_ready_work_purchase(body: SubmitRequest, user: User, db: AsyncSession, task_uuid: str) -> SubmitResponse:
     from api.models.marketplace import ReadyWork
-    from api.services.notification import send_document
+    from api.services.notification import send_document, send_file_bytes
+    from pathlib import Path
 
     work_result = await db.execute(
         select(ReadyWork).where(ReadyWork.id == body.work_id, ReadyWork.is_active.is_(True))
@@ -179,7 +180,6 @@ async def _handle_ready_work_purchase(body: SubmitRequest, user: User, db: Async
     await db.commit()
 
     import asyncio
-    from api.services.notification import send_document
     new_balance = float(user.balance)
     caption = (
         f"✅ <b>Tayyor ish yuborildi!</b>\n\n"
@@ -187,7 +187,24 @@ async def _handle_ready_work_purchase(body: SubmitRequest, user: User, db: Async
         f"💰 To'landi: {work.price:,.0f} so'm\n"
         f"💳 Qoldi: {new_balance:,.0f} so'm"
     )
-    asyncio.create_task(send_document(user.telegram_id, work.file_id, caption))
+
+    file_id = work.file_id or ""
+    # Local file (admin uploaded via web)
+    if file_id.startswith("/app/data/") or file_id.startswith("/data/"):
+        path = Path(file_id)
+        if path.exists():
+            data = path.read_bytes()
+            asyncio.create_task(
+                send_file_bytes(user.telegram_id, data, path.name, caption)
+            )
+        else:
+            logger.error(f"Ready work file not found on disk: {file_id}")
+    elif file_id and file_id != "local":
+        # Telegram file_id (legacy admin upload via bot)
+        asyncio.create_task(send_document(user.telegram_id, file_id, caption))
+    else:
+        logger.error(f"Ready work {work.id} has no usable file_id")
+
     return SubmitResponse(task_uuid=task_uuid, amount_charged=float(work.price))
 
 
