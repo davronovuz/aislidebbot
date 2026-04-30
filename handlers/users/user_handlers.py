@@ -51,6 +51,7 @@ class PresentationStates(StatesGroup):
     waiting_for_topic = State()
     waiting_for_details = State()
     waiting_for_slide_count = State()
+    waiting_for_template = State()  # YANGI: tayyor shablon yoki klassik dizayn
     waiting_for_theme = State()
     confirming_creation = State()
 
@@ -90,6 +91,57 @@ def skip_or_cancel_keyboard():
         resize_keyboard=True
     )
     return keyboard
+
+
+# ==================== TEMPLATE KEYBOARD (YANGI) ====================
+TEMPLATE_EMOJIS = {
+    "Minimalist": "🤍",
+    "Talim": "🎓",
+    "Universal": "💼",
+}
+
+
+def get_template_keyboard() -> InlineKeyboardMarkup:
+    """Tayyor PPTX shablonlar tanlash keyboardi"""
+    try:
+        from utils.template_injector import get_injector
+        templates = get_injector().get_templates()
+    except Exception as e:
+        logger.error(f"Template injector load xato: {e}")
+        templates = []
+
+    kb = InlineKeyboardMarkup(row_width=2)
+    buttons = []
+    for t in templates:
+        emoji = TEMPLATE_EMOJIS.get(t['name'], "📋")
+        buttons.append(InlineKeyboardButton(
+            f"{emoji} {t['name']}",
+            callback_data=f"tpl_select:{t['file']}"
+        ))
+    if buttons:
+        # 2 ustunda joylash
+        for i in range(0, len(buttons), 2):
+            kb.row(*buttons[i:i + 2])
+
+    kb.add(InlineKeyboardButton(
+        "🎨 Klassik dizayn (rang tanlash)",
+        callback_data="tpl_classic"
+    ))
+    return kb
+
+
+async def show_template_selection(message: types.Message, state: FSMContext):
+    """Shablon tanlash ekranini ko'rsatish"""
+    text = (
+        "📋 <b>Prezentatsiya dizaynini tanlang:</b>\n\n"
+        "<b>Tayyor shablonlar</b> — professional dizayn, "
+        "matn shablonga avtomatik joylashadi:\n\n"
+        "🤍 <b>Minimalist</b> — toza, sodda, har mavzuga universal\n"
+        "🎓 <b>Talim</b> — talim, kurs ishi, diplom uchun\n"
+        "💼 <b>Universal</b> — biznes, prezentatsiya, har mavzu\n\n"
+        "Yoki <b>klassik dizayn</b>ni tanlang — keyin rang tema tanlaysiz."
+    )
+    await message.answer(text, parse_mode='HTML', reply_markup=get_template_keyboard())
 
 
 # ==================== THEME KEYBOARD ====================
@@ -634,9 +686,8 @@ Balansni to'ldiring: 💳 To'ldirish
             await state.finish()
             return
 
-        await message.answer("🎨 <b>Endi prezentatsiya uchun theme tanlang:</b>", parse_mode='HTML')
-        await show_theme_selection(message, state, 0)
-        await PresentationStates.waiting_for_theme.set()
+        await show_template_selection(message, state)
+        await PresentationStates.waiting_for_template.set()
 
     except ValueError:
         await message.answer("❌ Iltimos, faqat raqam kiriting!")
@@ -710,6 +761,68 @@ async def theme_skip_callback(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer("❌ Xatolik!")
 
 
+# ==================== TEMPLATE SELECTION CALLBACKS ====================
+
+@dp.callback_query_handler(lambda c: c.data.startswith('tpl_select:'),
+                            state=PresentationStates.waiting_for_template)
+async def template_select_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Tayyor shablon tanlandi — keyin to'g'ridan-to'g'ri tasdiqlashga"""
+    try:
+        template_file = callback.data.split(':', 1)[1]
+
+        # Shablon nomini olish
+        template_name = template_file.replace('.pptx', '')
+        try:
+            from utils.template_injector import get_injector
+            for t in get_injector().get_templates():
+                if t['file'] == template_file:
+                    template_name = t['name']
+                    break
+        except Exception:
+            pass
+
+        await state.update_data(
+            template_file=template_file,
+            selected_theme_id=None,
+            selected_theme_name=template_name,
+        )
+        await callback.answer(f"✅ {template_name} shabloni tanlandi!")
+
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+
+        await show_confirmation(callback.message, state)
+    except Exception as e:
+        logger.error(f"Template select xato: {e}")
+        await callback.answer("❌ Xatolik!")
+
+
+@dp.callback_query_handler(lambda c: c.data == 'tpl_classic',
+                            state=PresentationStates.waiting_for_template)
+async def template_classic_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Klassik dizayn — eski theme tanlash flow'iga o'tkaziladi"""
+    try:
+        await state.update_data(template_file=None)
+        await callback.answer("🎨 Klassik dizayn — endi rang tanlang")
+
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+
+        await callback.message.answer(
+            "🎨 <b>Endi prezentatsiya uchun rang tema'sini tanlang:</b>",
+            parse_mode='HTML'
+        )
+        await show_theme_selection(callback.message, state, 0)
+        await PresentationStates.waiting_for_theme.set()
+    except Exception as e:
+        logger.error(f"Template classic xato: {e}")
+        await callback.answer("❌ Xatolik!")
+
+
 async def show_confirmation(message: types.Message, state: FSMContext):
     """Yakuniy tasdiqlash ekranini ko'rsatish"""
     user_data = await state.get_data()
@@ -721,15 +834,21 @@ async def show_confirmation(message: types.Message, state: FSMContext):
     free_left = user_data.get('free_left', 0)
     selected_theme_name = user_data.get('selected_theme_name', 'Standart')
     selected_theme_id = user_data.get('selected_theme_id')
+    template_file = user_data.get('template_file')
 
     telegram_id = message.chat.id
     balance = user_db.get_user_balance(telegram_id)
 
-    theme_emoji = "🎨"
-    if selected_theme_id:
-        theme = get_theme_by_id(selected_theme_id)
-        if theme:
-            theme_emoji = theme.get('emoji', '🎨')
+    if template_file:
+        design_emoji = TEMPLATE_EMOJIS.get(selected_theme_name, "📋")
+        design_label = f"{design_emoji} <b>Shablon:</b> {selected_theme_name}"
+    else:
+        theme_emoji = "🎨"
+        if selected_theme_id:
+            theme = get_theme_by_id(selected_theme_id)
+            if theme:
+                theme_emoji = theme.get('emoji', '🎨')
+        design_label = f"{theme_emoji} <b>Theme:</b> {selected_theme_name}"
 
     summary = f"""
 📊 <b>PREZENTATSIYA YARATISH - TASDIQLASH</b>
@@ -737,7 +856,7 @@ async def show_confirmation(message: types.Message, state: FSMContext):
 <b>📝 Mavzu:</b> {topic}
 <b>📋 Qo'shimcha:</b> {details[:50]}{'...' if len(details) > 50 else ''}
 <b>📊 Slaydlar:</b> {slide_count} ta
-{theme_emoji} <b>Theme:</b> {selected_theme_name}
+{design_label}
 """
 
     if free_left > 0:
@@ -867,11 +986,14 @@ Tayyor bo'lgach sizga <b>PPTX fayl</b> yuboriladi! 🎉
 
         task_uuid = str(uuid.uuid4())
 
+        template_file = user_data.get('template_file')
+
         content_data = {
             'topic': topic,
             'details': details,
             'slide_count': slide_count,
-            'theme_id': selected_theme_id
+            'theme_id': selected_theme_id,
+            'template_file': template_file,
         }
 
         task_id = user_db.create_presentation_task(

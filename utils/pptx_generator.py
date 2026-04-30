@@ -1643,53 +1643,103 @@ class ProPPTXGenerator:
     # ======================== IMAGE FETCHING ========================
 
     async def _fetch_images(self, content: Dict, api_key: str = None) -> Dict[int, str]:
+        """
+        Yangi ImageProvider (Wikimedia/DDG/Unsplash) bilan parallel rasm
+        yuklash. Pixabay fallback sifatida (agar API kalit bo'lsa).
+        """
         images = {}
         slides = content.get("slides", [])
+        if not slides:
+            return images
 
-        timeout = aiohttp.ClientTimeout(total=45)
+        # Bitta ImageProvider session — barcha slaydlar uchun
         try:
-            import ssl
-            import certifi
-            ssl_ctx = ssl.create_default_context(cafile=certifi.where())
-            connector = aiohttp.TCPConnector(ssl=ssl_ctx)
-        except Exception:
-            connector = aiohttp.TCPConnector(ssl=False)
+            from utils.image_provider import ImageProvider
+            async with ImageProvider(pexels_api_key=os.getenv("PEXELS_API_KEY")) as provider:
+                tasks = []
+                for i, slide in enumerate(slides):
+                    keywords = slide.get("image_keywords", {}) or {}
+                    title = slide.get("title", "")
+                    bullets = slide.get("bullet_points", [])
+                    tasks.append(self._fetch_slide_image_v2(
+                        provider, i, title, bullets, keywords
+                    ))
 
-        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-            tasks = []
-            for i, slide in enumerate(slides):
-                keywords = slide.get("image_keywords", {})
-                if keywords:
-                    tasks.append(self._fetch_slide_image(session, api_key, i, keywords))
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for result in results:
+                    if isinstance(result, tuple):
+                        idx, path = result
+                        if path:
+                            images[idx] = path
+        except Exception as e:
+            logger.warning(f"ImageProvider failed: {e}, Pixabay fallback…")
 
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for result in results:
-                if isinstance(result, tuple):
-                    idx, path = result
-                    if path:
-                        images[idx] = path
+        # Topilmagan slaydlarni Pixabay bilan to'ldirish (agar API kalit bo'lsa)
+        if api_key:
+            timeout = aiohttp.ClientTimeout(total=30)
+            try:
+                import ssl, certifi
+                ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+                connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+            except Exception:
+                connector = aiohttp.TCPConnector(ssl=False)
 
-        logger.info(f"{len(images)} ta rasm yuklab olindi")
+            async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+                pixabay_tasks = []
+                for i, slide in enumerate(slides):
+                    if i in images:
+                        continue
+                    keywords = slide.get("image_keywords", {})
+                    if keywords:
+                        pixabay_tasks.append(
+                            self._fetch_pixabay_only(session, api_key, i, keywords)
+                        )
+                if pixabay_tasks:
+                    pix_results = await asyncio.gather(*pixabay_tasks, return_exceptions=True)
+                    for result in pix_results:
+                        if isinstance(result, tuple):
+                            idx, path = result
+                            if path:
+                                images[idx] = path
+
+        logger.info(f"{len(images)}/{len(slides)} ta rasm yuklab olindi")
         return images
 
-    async def _fetch_slide_image(self, session, api_key: str,
-                                  slide_idx: int, keywords: Dict) -> Tuple[int, Optional[str]]:
-        import urllib.parse
+    async def _fetch_slide_image_v2(
+        self, provider, slide_idx: int,
+        title: str, bullets: list, keywords: dict
+    ) -> Tuple[int, Optional[str]]:
+        # Avval AI bergan keyword'lar (eng aniq), keyin slide title
+        for key_type in ["primary", "secondary"]:
+            kw = keywords.get(key_type, "")
+            if kw:
+                img = await provider.fetch(kw)
+                if img:
+                    return (slide_idx, img)
 
+        # AI keyword'lar ishlamadi — slide title + bullets dan
+        img = await provider.fetch_for_slide(title, bullets)
+        if img:
+            return (slide_idx, img)
+
+        # Eng oxirida fallback keyword
+        fallback = keywords.get("fallback", "")
+        if fallback:
+            img = await provider.fetch(fallback)
+            if img:
+                return (slide_idx, img)
+
+        return (slide_idx, None)
+
+    async def _fetch_pixabay_only(self, session, api_key: str,
+                                   slide_idx: int, keywords: Dict) -> Tuple[int, Optional[str]]:
         for key_type in ["primary", "secondary", "fallback"]:
             keyword = keywords.get(key_type, "")
             if not keyword:
                 continue
-
-            if api_key:
-                img_path = await self._download_pixabay_image(session, api_key, keyword)
-                if img_path:
-                    return (slide_idx, img_path)
-
-            img_path = await self._download_picsum_image(session, keyword)
+            img_path = await self._download_pixabay_image(session, api_key, keyword)
             if img_path:
                 return (slide_idx, img_path)
-
         return (slide_idx, None)
 
     async def _download_pixabay_image(self, session, api_key: str,

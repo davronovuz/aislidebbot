@@ -397,14 +397,26 @@ Muvaffaqiyatlar! 🚀
         try:
             self.user_db.update_task_status(task_uuid, 'processing', progress=5)
 
-            # Theme olish
+            # Theme va shablon ma'lumotlarini olish
             theme_id = None
             theme_name = "Standart"
+            template_file = None
             try:
                 answers_json = task_data.get('answers', '{}')
                 answers_data = json.loads(answers_json)
                 theme_id = answers_data.get('theme_id')
-                if theme_id:
+                template_file = answers_data.get('template_file')
+                if template_file:
+                    # Shablon tanlangan — uning ko'rinish nomini olamiz
+                    try:
+                        from utils.template_injector import get_injector
+                        for t in get_injector().get_templates():
+                            if t['file'] == template_file:
+                                theme_name = t['name']
+                                break
+                    except Exception:
+                        theme_name = template_file.replace('.pptx', '')
+                elif theme_id:
                     try:
                         from utils.themes_data import get_theme_by_id
                         theme_info = get_theme_by_id(theme_id)
@@ -453,13 +465,51 @@ Muvaffaqiyatlar! 🚀
                 except:
                     pass
 
-            # 2. PPTX yaratish — ProPPTXGenerator (asosiy)
+            # 2. PPTX yaratish
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f"presentation_{task_type}_{user_id}_{timestamp}.pptx"
             output_path = f"/tmp/{filename}"
             pptx_created = False
 
-            if self.pro_pptx_generator:
+            # 2.A — Shablon tanlangan: HybridPPTXGenerator
+            # Cover + Thank-you original dizayn, content slaydlar toza dasturiy
+            # yasaladi (shabloning rang palitrasidan, mavzuga mos rasm bilan)
+            if template_file:
+                try:
+                    from utils.hybrid_pptx_generator import HybridPPTXGenerator
+                    logger.info(f"📋 HybridPPTXGenerator bilan PPTX: {template_file}")
+
+                    self.user_db.update_task_status(task_uuid, 'processing', progress=50)
+                    if telegram_id and progress_message_id:
+                        try:
+                            await self.bot.edit_message_text(
+                                f"🎨 <b>Prezentatsiya yaratilmoqda...</b>\n"
+                                f"📋 Shablon: <b>{theme_name}</b>\n\n"
+                                f"⏳ <b>Jarayon:</b>\n"
+                                f"1️⃣ ✅ Kontent tayyor\n"
+                                f"2️⃣ ⚙️ Shablonga joylanmoqda + rasmlar...\n"
+                                f"3️⃣ ⏸ Tayyor!\n\n"
+                                f"📊 Progress: 50%",
+                                telegram_id, progress_message_id, parse_mode='HTML'
+                            )
+                        except:
+                            pass
+
+                    gen = HybridPPTXGenerator(template_file)
+                    await gen.generate(content, output_path=output_path)
+
+                    file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+                    if file_size > 1000:
+                        pptx_created = True
+                        logger.info(f"✅ HybridPPTXGenerator muvaffaqiyatli: {file_size} bytes")
+                    else:
+                        logger.warning(f"⚠️ Hybrid PPTX kichik ({file_size}b), ProPPTXGenerator'ga fallback")
+                except Exception as e:
+                    logger.error(f"⚠️ HybridPPTXGenerator xato: {e}, ProPPTXGenerator'ga fallback")
+                    pptx_created = False
+
+            # 2.B — Shablon tanlanmagan yoki injector ishlamadi: ProPPTXGenerator
+            if not pptx_created and self.pro_pptx_generator:
                 try:
                     logger.info(f"🎨 ProPPTXGenerator bilan PPTX yaratish (theme: {theme_id})")
                     gen = self.pro_pptx_generator(theme_id=theme_id)
@@ -673,8 +723,23 @@ Muvaffaqiyatlar! 🚀
                 details = answers_data.get('details', '')
                 slide_count = answers_data.get('slide_count', 10)
                 language = answers_data.get('language', 'uz')
+
+                # Layout-aware: agar shablon tanlangan bo'lsa, AI dan
+                # template'ning slot'iga mos bullet soni so'raymiz
+                bullets_per_slide = None
+                template_file = answers_data.get('template_file')
+                if template_file:
+                    try:
+                        from utils.template_injector import get_injector
+                        slots = get_injector().get_template_slots(template_file)
+                        bullets_per_slide = slots.get('bullets_per_slide')
+                        logger.info(f"Layout-aware: template={template_file}, slots={bullets_per_slide}")
+                    except Exception as e:
+                        logger.warning(f"Template slot olishda xato: {e}")
+
                 return await self.content_generator.generate_presentation_content(
-                    topic, details, slide_count, use_gpt4=True, language=language
+                    topic, details, slide_count, use_gpt4=True, language=language,
+                    bullets_per_slide=bullets_per_slide,
                 )
         except Exception as e:
             logger.error(f"Content generation xato: {e}")

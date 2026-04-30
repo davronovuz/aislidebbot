@@ -78,11 +78,17 @@ class ContentGenerator:
             details: str,
             slide_count: int,
             use_gpt4: bool = False,
-            language: str = "uz"
+            language: str = "uz",
+            bullets_per_slide: Optional[List[int]] = None,
     ) -> Dict:
         """
-        Professional prezentatsiya uchun content yaratish
-        GPT-4o bilan ishlaydi
+        Professional prezentatsiya uchun content yaratish.
+
+        Args:
+            bullets_per_slide: Agar shablon tanlangan bo'lsa, har slayd uchun
+                aniq bullet soni ro'yxati. Masalan [4, 4, 5] — bu slayd 1-3 da
+                aynan shu sondagi bullet bo'lishi kerak. AI shu ko'rsatmaga
+                amal qiladi, shabloning sig'imiga mos chiqadi.
         """
         model = "gpt-4o-mini"
 
@@ -130,12 +136,33 @@ class ContentGenerator:
         }
         rules = rules_map.get(language, rules_map["uz"])
 
+        # Layout-aware: shablon tanlangan bo'lsa, har slayd uchun aniq bullet soni
+        layout_hint = ""
+        if bullets_per_slide:
+            slot_lines = []
+            for i in range(slide_count):
+                # Birinchi va oxirgi slayd kirish/xulosa — qolganlari content
+                if i == 0:
+                    slot_lines.append(f"  Slide {i+1} (KIRISH): 3-4 bullets")
+                elif i == slide_count - 1:
+                    slot_lines.append(f"  Slide {i+1} (XULOSA): 3-4 bullets")
+                else:
+                    # Content slaydlar uchun template'dan slot olamiz
+                    content_idx = (i - 1) % len(bullets_per_slide)
+                    n = bullets_per_slide[content_idx]
+                    slot_lines.append(f"  Slide {i+1}: EXACTLY {n} bullets")
+            layout_hint = (
+                "\n\n⚠️ STRICT BULLET COUNT (template constraint — must match exactly):\n"
+                + "\n".join(slot_lines)
+                + "\n"
+            )
+
         prompt = f"""You are an expert presentation creator. Create professional, detailed presentation content.
 
 TOPIC: {topic}
 ADDITIONAL INFO: {details or "None"}
 NUMBER OF SLIDES: {slide_count}
-
+{layout_hint}
 CRITICAL LANGUAGE REQUIREMENT: ALL text content (title, subtitle, content, bullet_points) MUST be written {lang_instruction}. This is mandatory — do NOT use any other language for the content.
 
 {rules}

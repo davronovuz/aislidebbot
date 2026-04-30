@@ -1,0 +1,79 @@
+{
+  "templates": [
+    {
+      "file": "minimalist.pptx",
+      "name": "Minimalist",
+      "description": "Toza, sodda — har mavzuga universal mos",
+      "emoji": "🤍",
+      "slide_count": 2,
+      "slides": [
+        {
+          "index": 0,
+          "type": "title",
+          "markers": [
+            "{{TITLE}}",
+            "{{SUBTITLE}}"
+          ]
+        },
+        {
+          "index": 1,
+          "type": "conclusion",
+          "markers": [
+            "{{CONCLUSION_TITLE}}",
+            "{{CONCLUSION_SUBTITLE}}"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "modern_edu.pptx",
+      "name": "Talim",
+      "description": "Talim, kurs ishi, diplom uchun",
+      "emoji": "🎓",
+      "slide_count": 2,
+      "slides": [
+        {
+          "index": 0,
+          "type": "title",
+          "markers": [
+            "{{TITLE}}",
+            "{{SUBTITLE}}"
+          ]
+        },
+        {
+          "index": 1,
+          "type": "conclusion",
+          "markers": [
+            "{{CONCLUSION_TITLE}}",
+            "{{CONCLUSION_SUBTITLE}}"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "multipurpose.pptx",
+      "name": "Universal",
+      "description": "Biznes, prezentatsiya, har mavzu",
+      "emoji": "💼",
+      "slide_count": 2,
+      "slides": [
+        {
+          "index": 0,
+          "type": "title",
+          "markers": [
+            "{{TITLE}}",
+            "{{SUBTITLE}}"
+          ]
+        },
+        {
+          "index": 1,
+          "type": "conclusion",
+          "markers": [
+            "{{CONCLUSION_TITLE}}",
+            "{{CONCLUSION_SUBTITLE}}"
+          ]
+        }
+      ]
+    }
+  ]
+}

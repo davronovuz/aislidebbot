@@ -209,3 +209,7 @@ __marimo__/
 *.db
 *.env
 
+
+# AI Slide Bot specific
+.DS_Store
+templates/_archived/
