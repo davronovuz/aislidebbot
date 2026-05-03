@@ -149,10 +149,13 @@ class DocxGenerator:
     # Sahifa va stil sozlamalari
     # ──────────────────────────────────────────────
 
-    # Page borders qo'yiladigan ish turlari (rasmiy hujjatlar)
+    # Page borders qo'yiladigan ish turlari — hozir HAMMASI rasmiy ramkali
     BORDERED_WORK_TYPES = {
         'kurs_ishi', 'diplom_ishi', 'bitiruv_malakaviy_ishi',
         'magistr_dissertatsiyasi', 'magistr_diss',
+        'mustaqil_ish', 'referat', 'hisobot',
+        'ilmiy_maqola', 'laboratoriya_ishi', 'amaliy_ish',
+        'tezis',
     }
 
     def _setup_page(self, doc: Document, work_type: str = ''):
