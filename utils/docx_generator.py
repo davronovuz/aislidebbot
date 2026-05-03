@@ -378,7 +378,7 @@ class DocxGenerator:
                               add_page_break: bool = False):
         """
         Sarlavha qo'shish.
-        level=1: Bob sarlavhasi (markazlashtirilgan, 16pt, bold)
+        level=1: Bob sarlavhasi (markazlashtirilgan, 16pt, bold + pastki chiziq)
         level=2: Bo'lim sarlavhasi (chapdan, 14pt, bold)
         """
         if add_page_break:
@@ -386,14 +386,23 @@ class DocxGenerator:
 
         p = doc.add_paragraph()
         p.paragraph_format.first_line_indent = Cm(0)
-        p.paragraph_format.space_before = Pt(0) if add_page_break else Pt(12)
-        p.paragraph_format.space_after = Pt(12)
+        p.paragraph_format.space_before = Pt(0) if add_page_break else Pt(14)
+        p.paragraph_format.space_after = Pt(14) if level == 1 else Pt(8)
+        p.paragraph_format.keep_with_next = True
 
         if level == 1:
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.add_run(text.upper())
             run.bold = True
             run.font.size = self.FONT_SIZE_H1
+            # Bob sarlavhasi tagiga chiziq qo'shish (paragraph bottom border)
+            pPr = p._p.get_or_add_pPr()
+            border_xml = (
+                f'<w:pBdr {nsdecls("w")}>'
+                f'<w:bottom w:val="single" w:sz="6" w:space="6" w:color="000000"/>'
+                f'</w:pBdr>'
+            )
+            pPr.append(parse_xml(border_xml))
         else:
             p.alignment = WD_ALIGN_PARAGRAPH.LEFT
             run = p.add_run(text)
@@ -421,12 +430,16 @@ class DocxGenerator:
         return p
 
     def _add_empty_lines(self, doc: Document, count: int):
-        """Bo'sh qatorlar qo'shish"""
+        """Bo'sh qatorlar qo'shish (compact, titul sahifaga sig'ishi uchun)"""
         for _ in range(count):
             p = doc.add_paragraph()
             p.paragraph_format.first_line_indent = Cm(0)
             p.paragraph_format.space_after = Pt(0)
             p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.line_spacing = 1.0
+            run = p.add_run('')
+            run.font.size = Pt(12)
+            run.font.name = self.FONT_NAME
 
     def _add_right_line(self, doc: Document, label: str, value: str, size: int = 14):
         """O'ngga tekislangan label: value qator"""
@@ -455,20 +468,20 @@ class DocxGenerator:
 
         # ─── YUQORI QISM: Vazirlk + Universitet + Fakultet ───
 
-        # Vazirlik
+        # Vazirlik (14pt bold — kattaroq, aniq ko'rinadi)
         self._add_centered_line(doc,
             "O'ZBEKISTON RESPUBLIKASI OLIY TA'LIM, FAN VA INNOVATSIYALAR VAZIRLIGI",
-            size=12, bold=True, space_after=6)
+            size=14, bold=True, space_after=8)
 
-        # Universitet nomi
+        # Universitet nomi (16pt bold — asosiy diqqat)
         institution = author_info.get('institution', '')
         if institution:
-            self._add_centered_line(doc, institution.upper(), size=14, bold=True, space_after=4)
+            self._add_centered_line(doc, institution.upper(), size=16, bold=True, space_after=6)
 
         # Fakultet
         faculty = author_info.get('faculty', '')
         if faculty:
-            self._add_centered_line(doc, f"{faculty} fakulteti", size=14, bold=False, space_after=2)
+            self._add_centered_line(doc, f"{faculty} fakulteti", size=14, bold=False, space_after=4)
 
         # Kafedra (fan nomi asosida)
         department = author_info.get('department', '')
@@ -477,20 +490,23 @@ class DocxGenerator:
         elif subject:
             self._add_centered_line(doc, f'"{subject}" kafedrasi', size=14, bold=False, space_after=0)
 
-        # ─── O'RTA QISM: Ish turi + Mavzu ───
+        # Yuqori qismni ajratuvchi gorizontal chiziq
+        self._add_horizontal_separator(doc, space_before=6, space_after=6)
 
-        self._add_empty_lines(doc, 4)
+        # ─── O'RTA QISM: Ish turi + Mavzu (markaziy diqqat) ───
 
-        # Ish turi
+        self._add_empty_lines(doc, 2)
+
+        # Ish turi (22pt bold — yirik)
         work_label = WORK_TYPE_LABELS.get(work_type, 'MUSTAQIL ISH')
-        self._add_centered_line(doc, work_label, size=18, bold=True, space_after=8)
+        self._add_centered_line(doc, work_label, size=22, bold=True, space_after=10)
 
-        # "Mavzu:" sarlavhasi
-        self._add_centered_line(doc, 'Mavzu:', size=14, bold=False, space_after=4)
+        # "Mavzu:" sarlavhasi (16pt bold)
+        self._add_centered_line(doc, 'Mavzu:', size=16, bold=True, space_after=6)
 
-        # Mavzu nomi (katta, qalin)
+        # Mavzu nomi — KATTA (24pt bold) + ramka
         title = content.get('title', 'MAVZU')
-        self._add_centered_line(doc, f'"{title.upper()}"', size=16, bold=True, space_after=4)
+        self._add_bordered_title(doc, f'«{title.upper()}»', size=24)
 
         # Fan nomi (subtitle)
         if subject:
@@ -498,7 +514,7 @@ class DocxGenerator:
 
         # ─── PASTKI-O'RTA QISM: Bajardi / Tekshirdi ───
 
-        self._add_empty_lines(doc, 4)
+        self._add_empty_lines(doc, 2)
 
         # Bajardi bloki
         student = author_info.get('student_name', '')
@@ -520,12 +536,53 @@ class DocxGenerator:
 
         # ─── ENG PASTKI QISM: Shahar – Yil ───
 
-        self._add_empty_lines(doc, 3)
-
+        self._add_empty_lines(doc, 1)
         self._add_centered_line(doc, f'Toshkent \u2013 {datetime.now().year}', size=14, bold=True)
 
         # Yangi sahifa
         doc.add_page_break()
+
+    def _add_horizontal_separator(self, doc: Document, space_before: int = 6, space_after: int = 6):
+        """Gorizontal ajratuvchi chiziq (paragraph bottom border orqali)."""
+        p = doc.add_paragraph()
+        p.paragraph_format.first_line_indent = Cm(0)
+        p.paragraph_format.space_before = Pt(space_before)
+        p.paragraph_format.space_after = Pt(space_after)
+        pPr = p._p.get_or_add_pPr()
+        border_xml = (
+            f'<w:pBdr {nsdecls("w")}>'
+            f'<w:bottom w:val="single" w:sz="8" w:space="1" w:color="000000"/>'
+            f'</w:pBdr>'
+        )
+        pPr.append(parse_xml(border_xml))
+
+    def _add_bordered_title(self, doc: Document, text: str, size: int = 24):
+        """Mavzu nomini ramka ichida, markazlashtirilgan, katta shrift bilan qo'shish (titul markaziy diqqat)."""
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.first_line_indent = Cm(0)
+        p.paragraph_format.left_indent = Cm(1.5)
+        p.paragraph_format.right_indent = Cm(1.5)
+        p.paragraph_format.space_before = Pt(8)
+        p.paragraph_format.space_after = Pt(8)
+        p.paragraph_format.line_spacing = 1.2
+
+        pPr = p._p.get_or_add_pPr()
+        border_xml = (
+            f'<w:pBdr {nsdecls("w")}>'
+            f'<w:top w:val="single" w:sz="12" w:space="6" w:color="000000"/>'
+            f'<w:left w:val="single" w:sz="12" w:space="8" w:color="000000"/>'
+            f'<w:bottom w:val="single" w:sz="12" w:space="6" w:color="000000"/>'
+            f'<w:right w:val="single" w:sz="12" w:space="8" w:color="000000"/>'
+            f'</w:pBdr>'
+        )
+        pPr.append(parse_xml(border_xml))
+
+        run = p.add_run(text)
+        run.bold = True
+        run.font.size = Pt(size)
+        run.font.name = self.FONT_NAME
+        run.font.color.rgb = RGBColor(0, 0, 0)
 
     def _add_annotation_page(self, doc: Document, content: Dict):
         """
@@ -597,10 +654,23 @@ class DocxGenerator:
             title = item.get('title', '')
             page = item.get('page', '')
 
+            # 1-darajali band (bob, kirish, xulosa, adabiyotlar) — bold
+            # 2-darajali band (1.1., 1.2. ...) — oddiy + chap chetidan biroz ichkari
+            stripped = title.lstrip()
+            is_subsection = bool(re.match(r'^\d+\.\d+', stripped))
+            is_top_level = (not is_subsection) and (
+                stripped.isupper()
+                or re.match(r'^\d+[-.]?\s*BOB', stripped, re.IGNORECASE)
+                or stripped.upper().startswith(('KIRISH', 'XULOSA', 'MUNDARIJA',
+                                                'ANNOTATSIYA', 'TAVSIYALAR',
+                                                'FOYDALANILGAN', 'ILOVALAR'))
+            )
+
             p = doc.add_paragraph()
             p.paragraph_format.first_line_indent = Cm(0)
-            p.paragraph_format.space_after = Pt(2)
-            p.paragraph_format.space_before = Pt(2)
+            p.paragraph_format.left_indent = Cm(0.6) if is_subsection else Cm(0)
+            p.paragraph_format.space_after = Pt(3) if is_top_level else Pt(2)
+            p.paragraph_format.space_before = Pt(6) if is_top_level else Pt(2)
             p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.ONE_POINT_FIVE
 
             # Tab stop qo'shish - nuqtali chiziq bilan o'ng tomonga
@@ -615,12 +685,16 @@ class DocxGenerator:
             run = p.add_run(title)
             run.font.size = self.FONT_SIZE_BODY
             run.font.name = self.FONT_NAME
+            if is_top_level:
+                run.bold = True
 
             # Tab va sahifa raqami
             if page is not None and page != '':
                 run = p.add_run(f'\t{page}')
                 run.font.size = self.FONT_SIZE_BODY
                 run.font.name = self.FONT_NAME
+                if is_top_level:
+                    run.bold = True
 
         doc.add_page_break()
 
@@ -635,7 +709,7 @@ class DocxGenerator:
 
         self._add_section_heading(doc, title, level=1, add_page_break=False)
         self._add_formatted_content(doc, text)
-        doc.add_page_break()
+        # Keyingi bob `add_page_break=True` bilan boshlanadi — bu yerda qo'shimcha break shart emas
 
     def _add_chapters(self, doc: Document, content: Dict):
         """Asosiy boblarni qo'shish (har bir bob yangi sahifadan)"""

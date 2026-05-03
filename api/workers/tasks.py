@@ -174,23 +174,70 @@ def _process_presentation(task_uuid: str, telegram_id: int, data: dict, amount_c
 
 
 def _process_course_work(task_uuid: str, telegram_id: int, data: dict, amount_charged: float):
+    import tempfile, os, subprocess
     from utils.course_work_generator import CourseWorkGenerator
     from utils.docx_generator import DocxGenerator
 
     work_type = data.get("work_type", "mustaqil_ish")
     work_name = data.get("work_name", "Mustaqil ish")
     topic = data.get("topic", "Mavzusiz")
+    subject = data.get("subject", data.get("subject_name", topic.split()[0] if topic.split() else "Umumiy"))
+    details = data.get("details", "")
     page_count = int(data.get("page_count", 10))
+    language = data.get("language", "uz")
+    file_format = data.get("file_format", "docx")
 
     _update_task_status(task_uuid, "processing", 20)
 
     generator = CourseWorkGenerator(settings.openai_api_key)
-    content = _run(generator.generate(data))
+    content = _run(generator.generate_course_work_content(
+        work_type=work_type,
+        topic=topic,
+        subject=subject,
+        details=details,
+        page_count=page_count,
+        language=language,
+    ))
+    if not content:
+        raise Exception("Content yaratilmadi")
     _update_task_status(task_uuid, "processing", 60)
 
     docx_gen = DocxGenerator()
-    file_format = data.get("file_format", "docx")
-    file_bytes, ext = docx_gen.generate(content, data, file_format)
+
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+        docx_path = f.name
+
+    try:
+        ok = docx_gen.create_course_work(content, docx_path, work_type)
+        if not ok:
+            raise Exception("DOCX yaratilmadi")
+
+        if file_format == "pdf":
+            pdf_path = docx_path.replace(".docx", ".pdf")
+            try:
+                subprocess.run(
+                    ["soffice", "--headless", "--convert-to", "pdf", "--outdir",
+                     os.path.dirname(docx_path), docx_path],
+                    timeout=60, check=True, capture_output=True
+                )
+                with open(pdf_path, "rb") as f:
+                    file_bytes = f.read()
+                ext = "pdf"
+            except Exception:
+                with open(docx_path, "rb") as f:
+                    file_bytes = f.read()
+                ext = "docx"
+            finally:
+                if os.path.exists(pdf_path):
+                    os.unlink(pdf_path)
+        else:
+            with open(docx_path, "rb") as f:
+                file_bytes = f.read()
+            ext = "docx"
+    finally:
+        if os.path.exists(docx_path):
+            os.unlink(docx_path)
+
     _update_task_status(task_uuid, "processing", 85)
 
     # R2 storage
