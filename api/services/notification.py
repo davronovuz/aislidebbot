@@ -23,6 +23,52 @@ async def send_message(chat_id: int, text: str, parse_mode: str = "HTML") -> boo
             return False
 
 
+async def send_message_id(chat_id: int, text: str, parse_mode: str = "HTML") -> int | None:
+    """sendMessage va message_id qaytaradi (keyinchalik edit qilish uchun)."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            r = await client.post(
+                f"{TELEGRAM_API}/sendMessage",
+                json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode},
+            )
+            if r.status_code == 200:
+                return r.json().get("result", {}).get("message_id")
+            return None
+        except Exception as e:
+            logger.error(f"send_message_id to {chat_id} failed: {e}")
+            return None
+
+
+async def edit_message(chat_id: int, message_id: int, text: str, parse_mode: str = "HTML") -> bool:
+    """editMessageText — progress yangilash uchun."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            r = await client.post(
+                f"{TELEGRAM_API}/editMessageText",
+                json={
+                    "chat_id": chat_id, "message_id": message_id,
+                    "text": text, "parse_mode": parse_mode,
+                },
+            )
+            # 400 — "message is not modified" yoki rate limit; xato ham emas
+            return r.status_code == 200
+        except Exception as e:
+            logger.debug(f"edit_message {message_id} to {chat_id} failed: {e}")
+            return False
+
+
+async def delete_message(chat_id: int, message_id: int) -> bool:
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            r = await client.post(
+                f"{TELEGRAM_API}/deleteMessage",
+                json={"chat_id": chat_id, "message_id": message_id},
+            )
+            return r.status_code == 200
+        except Exception:
+            return False
+
+
 async def send_document(chat_id: int, file_id: str, caption: str = "", parse_mode: str = "HTML") -> bool:
     async with httpx.AsyncClient(timeout=30) as client:
         try:

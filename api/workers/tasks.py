@@ -129,6 +129,13 @@ def _process_presentation(task_uuid: str, telegram_id: int, data: dict, amount_c
     language = data.get("language", "uz")
     details = data.get("details", "")
 
+    eta_str = f"{max(1, slide_count // 5)}-{max(2, slide_count // 3)} daqiqa"
+
+    progress_msg_id = _run(_send_progress_msg(
+        telegram_id,
+        _progress_text("Prezentatsiya", 5, f"Mavzu: <b>{topic[:60]}</b>\n📑 {slide_count} slayd", eta_str),
+    ))
+
     # Content generation
     if data.get("pre_generated") and data.get("slides"):
         content = {
@@ -139,14 +146,23 @@ def _process_presentation(task_uuid: str, telegram_id: int, data: dict, amount_c
         logger.info(f"[Worker] Using pre-generated content for {task_uuid}")
     else:
         _update_task_status(task_uuid, "processing", 25)
+        if progress_msg_id:
+            _run(_edit_progress_msg(telegram_id, progress_msg_id,
+                _progress_text("Prezentatsiya", 25, "Slayd matnlari yaratilmoqda...", eta_str)))
         content = _run(_generate_presentation_content(topic, details, slide_count, language))
         logger.info(f"[Worker] Content generated for {task_uuid}")
 
     _update_task_status(task_uuid, "processing", 60)
+    if progress_msg_id:
+        _run(_edit_progress_msg(telegram_id, progress_msg_id,
+            _progress_text("Prezentatsiya", 60, "Rasmlar va dizayn tayyorlanmoqda...", eta_str)))
 
     # PPTX generation
     pptx_bytes = _generate_pptx(content, theme_id, slide_count)
     _update_task_status(task_uuid, "processing", 85)
+    if progress_msg_id:
+        _run(_edit_progress_msg(telegram_id, progress_msg_id,
+            _progress_text("Prezentatsiya", 95, "Telegram'ga yuborilmoqda...", "")))
 
     # Store to R2
     r2_key = None
@@ -169,6 +185,9 @@ def _process_presentation(task_uuid: str, telegram_id: int, data: dict, amount_c
         _send_pptx_to_telegram(telegram_id, pptx_bytes, filename, caption)
     )
 
+    if progress_msg_id:
+        _run(_delete_progress_msg(telegram_id, progress_msg_id))
+
     _update_task_status(task_uuid, "completed", 100, file_id=file_id, r2_key=r2_key)
     logger.info(f"[Worker] Task {task_uuid} completed ✓")
 
@@ -187,20 +206,63 @@ def _process_course_work(task_uuid: str, telegram_id: int, data: dict, amount_ch
     language = data.get("language", "uz")
     file_format = data.get("file_format", "docx")
 
+    # Hujjat hajmi bo'yicha taxminiy vaqt
+    eta_minutes = max(2, round(page_count * 0.25))  # ~15s/sahifa
+    eta_str = f"{eta_minutes}-{eta_minutes + 2} daqiqa"
+
+    # Boshlang'ich progress message
+    progress_msg_id = _run(_send_progress_msg(
+        telegram_id,
+        _progress_text(work_name, 5, f"Mavzu: <b>{topic[:60]}</b>\n📑 {page_count} sahifa", eta_str),
+    ))
+
     _update_task_status(task_uuid, "processing", 20)
+    if progress_msg_id:
+        _run(_edit_progress_msg(telegram_id, progress_msg_id,
+            _progress_text(work_name, 20, "Reja (outline) tuzilmoqda...", eta_str)))
 
     generator = CourseWorkGenerator(settings.openai_api_key)
-    content = _run(generator.generate_course_work_content(
-        work_type=work_type,
-        topic=topic,
-        subject=subject,
-        details=details,
-        page_count=page_count,
-        language=language,
-    ))
+
+    # Progress callback — har bir bo'lim tugaganda chaqiriladi
+    total_steps = max(1, page_count // 2)  # taxminiy bo'limlar soni
+    step_counter = {"done": 0}
+
+    async def on_step(step_name: str):
+        step_counter["done"] += 1
+        # 20%–80% oraliqda taqsim qilamiz
+        pct = min(80, 20 + int(60 * step_counter["done"] / max(total_steps, 1)))
+        if progress_msg_id:
+            await _edit_progress_msg(telegram_id, progress_msg_id,
+                _progress_text(work_name, pct, step_name, eta_str))
+
+    # CourseWorkGenerator progress_callback ni qo'llab-quvvatlasa, uzatiladi
+    try:
+        content = _run(generator.generate_course_work_content(
+            work_type=work_type,
+            topic=topic,
+            subject=subject,
+            details=details,
+            page_count=page_count,
+            language=language,
+            progress_callback=on_step,
+        ))
+    except TypeError:
+        # Eski signature — callback ishlatilmaydi
+        content = _run(generator.generate_course_work_content(
+            work_type=work_type,
+            topic=topic,
+            subject=subject,
+            details=details,
+            page_count=page_count,
+            language=language,
+        ))
+
     if not content:
         raise Exception("Content yaratilmadi")
     _update_task_status(task_uuid, "processing", 60)
+    if progress_msg_id:
+        _run(_edit_progress_msg(telegram_id, progress_msg_id,
+            _progress_text(work_name, 80, "Matn tayyor. DOCX hujjat yaratilmoqda...", eta_str)))
 
     docx_gen = DocxGenerator()
 
@@ -239,6 +301,9 @@ def _process_course_work(task_uuid: str, telegram_id: int, data: dict, amount_ch
             os.unlink(docx_path)
 
     _update_task_status(task_uuid, "processing", 85)
+    if progress_msg_id:
+        _run(_edit_progress_msg(telegram_id, progress_msg_id,
+            _progress_text(work_name, 95, "Telegram'ga yuborilmoqda...", "")))
 
     # R2 storage
     from api.services import storage
@@ -257,6 +322,10 @@ def _process_course_work(task_uuid: str, telegram_id: int, data: dict, amount_ch
     file_id = _run(
         _send_pptx_to_telegram(telegram_id, file_bytes, filename, caption)
     )
+
+    # Progress xabarini o'chirish (foydalanuvchi faqat yakuniy faylni ko'rsin)
+    if progress_msg_id:
+        _run(_delete_progress_msg(telegram_id, progress_msg_id))
 
     _update_task_status(task_uuid, "completed", 100, file_id=file_id, r2_key=r2_key)
     logger.info(f"[Worker] Course work task {task_uuid} completed ✓")
@@ -317,4 +386,31 @@ async def _notify_failure(telegram_id: int, error: str):
         telegram_id,
         f"❌ <b>Xatolik yuz berdi!</b>\n\nIltimos, qayta urinib ko'ring.\n"
         f"Pul balansingizga qaytarildi.\n\nXato: {error[:200]}"
+    )
+
+
+async def _send_progress_msg(telegram_id: int, text: str) -> int | None:
+    from api.services.notification import send_message_id
+    return await send_message_id(telegram_id, text)
+
+
+async def _edit_progress_msg(telegram_id: int, message_id: int, text: str) -> bool:
+    from api.services.notification import edit_message
+    return await edit_message(telegram_id, message_id, text)
+
+
+async def _delete_progress_msg(telegram_id: int, message_id: int) -> bool:
+    from api.services.notification import delete_message
+    return await delete_message(telegram_id, message_id)
+
+
+def _progress_text(work_name: str, percent: int, current_step: str, eta: str = "") -> str:
+    """Chiroyli progress message (HTML)."""
+    bars = int(percent / 5)  # 0..20 bloka
+    bar = "█" * bars + "░" * (20 - bars)
+    eta_line = f"\n⏱ <i>Taxminiy: {eta}</i>" if eta else ""
+    return (
+        f"⚙️ <b>{work_name} yaratilmoqda</b>\n\n"
+        f"<code>{bar}</code> {percent}%\n\n"
+        f"📍 {current_step}{eta_line}"
     )

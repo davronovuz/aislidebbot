@@ -28,12 +28,25 @@ class CourseWorkGenerator:
             details: str,
             page_count: int,
             language: str = 'uz',
-            use_gpt4: bool = True
+            use_gpt4: bool = True,
+            progress_callback=None,
     ) -> Dict:
         """
         Mustaqil ish uchun BATAFSIL content yaratish - MULTI-STEP
-        Har bir bo'lim alohida API call bilan yaratiladi
+        Har bir bo'lim alohida API call bilan yaratiladi.
+
+        progress_callback: optional async callback (str) -> None — har step da chaqiriladi.
         """
+        async def _notify(step_name: str):
+            if progress_callback is None:
+                return
+            try:
+                res = progress_callback(step_name)
+                if asyncio.iscoroutine(res):
+                    await res
+            except Exception as e:
+                logger.debug(f"progress_callback error: {e}")
+
         try:
             # Ish turi bo'yicha struktura
             structure = self._get_work_structure(work_type, page_count)
@@ -46,6 +59,7 @@ class CourseWorkGenerator:
             # STEP 1: Generate outline (structure/plan)
             # =============================================
             logger.info("Step 1: Outline yaratilmoqda...")
+            await _notify("Reja (outline) tuzilmoqda...")
             outline = await self._generate_outline(
                 work_type, topic, subject, details, page_count, language, structure
             )
@@ -55,6 +69,7 @@ class CourseWorkGenerator:
             # STEP 2: Generate KIRISH (introduction)
             # =============================================
             logger.info("Step 2: KIRISH yaratilmoqda...")
+            await _notify("KIRISH yozilmoqda...")
             intro_min_words = max(800, structure['intro_words'])
             introduction_text = await self._generate_section_content(
                 topic=topic,
@@ -96,6 +111,7 @@ class CourseWorkGenerator:
                     sec_number = section_info.get('number', f'{chapter_number}.{sec_idx + 1}')
 
                     logger.info(f"Step 3: {sec_number}. {sec_title} yaratilmoqda...")
+                    await _notify(f"{sec_number}. {sec_title}")
 
                     section_text = await self._generate_section_content(
                         topic=topic,
@@ -128,6 +144,7 @@ class CourseWorkGenerator:
             # STEP 4: Generate XULOSA (conclusion)
             # =============================================
             logger.info("Step 4: XULOSA yaratilmoqda...")
+            await _notify("XULOSA yozilmoqda...")
             conclusion_min_words = max(600, structure['conclusion_words'])
             conclusion_text = await self._generate_section_content(
                 topic=topic,
@@ -147,6 +164,7 @@ class CourseWorkGenerator:
             # STEP 5: Generate references
             # =============================================
             logger.info("Step 5: Adabiyotlar yaratilmoqda...")
+            await _notify("Adabiyotlar ro'yxati tuzilmoqda...")
             references = await self._generate_references_ai(
                 topic, subject, language, lang_instructions, structure['min_references']
             )
