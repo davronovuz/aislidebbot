@@ -102,6 +102,34 @@ def process_presentation_task(task_uuid: str):
         logger.error(f"[Worker] Task {task_uuid} not found in DB")
         return
 
+    # IDEMPOTENCY — agar task allaqachon bajarilgan yoki boshqa worker
+    # tomonidan oxirgi 60 sekund ichida olingan bo'lsa, takror ishlamaymiz
+    status = task.get("status")
+    if status == "completed":
+        logger.info(f"[Worker] Task {task_uuid} allaqachon completed — skip")
+        return
+    if status == "failed":
+        logger.info(f"[Worker] Task {task_uuid} allaqachon failed — skip")
+        return
+    if status == "processing":
+        # Boshqa worker hozir ishlayotgan bo'lishi mumkin.
+        # started_at oxirgi 60s ichida bo'lsa — duplicate; eski bo'lsa — abandoned, davom etamiz
+        from datetime import datetime, timezone, timedelta
+        started_at = task.get("started_at")
+        if started_at:
+            now = datetime.now(timezone.utc)
+            if isinstance(started_at, datetime):
+                if (now - started_at) < timedelta(seconds=60):
+                    logger.warning(
+                        f"[Worker] Task {task_uuid} hozir boshqa worker'da "
+                        f"ishlayapti (started_at={started_at}) — duplicate, skip"
+                    )
+                    return
+                logger.info(
+                    f"[Worker] Task {task_uuid} eski processing'da "
+                    f"(started_at={started_at}) — abandoned, davom etamiz"
+                )
+
     telegram_id = task["telegram_id"]
     amount_charged = float(task.get("amount_charged") or 0)
 
@@ -109,8 +137,14 @@ def process_presentation_task(task_uuid: str):
         _update_task_status(task_uuid, "processing", 10)
         content_data = json.loads(task["answers"] or "{}")
         presentation_type = task["presentation_type"]
+        work_type = (content_data.get("work_type") or "").lower()
 
-        if presentation_type == "course_work":
+        # Maxsus oqimlar (work_type bo'yicha aniqlanadi)
+        if work_type == "tezis":
+            _process_tezis(task_uuid, telegram_id, content_data, amount_charged)
+        elif work_type == "krossvord":
+            _process_krossvord(task_uuid, telegram_id, content_data, amount_charged)
+        elif presentation_type == "course_work":
             _process_course_work(task_uuid, telegram_id, content_data, amount_charged)
         else:
             _process_presentation(task_uuid, telegram_id, content_data, amount_charged)
@@ -329,6 +363,196 @@ def _process_course_work(task_uuid: str, telegram_id: int, data: dict, amount_ch
 
     _update_task_status(task_uuid, "completed", 100, file_id=file_id, r2_key=r2_key)
     logger.info(f"[Worker] Course work task {task_uuid} completed ✓")
+
+
+# ─── TEZIS ────────────────────────────────────────────────────────────────
+
+def _process_tezis(task_uuid: str, telegram_id: int, data: dict, amount_charged: float):
+    """Konferensiya tezisi (1-2 bet, 1.0 spacing, ramkasiz)."""
+    import tempfile, os
+    from utils.thesis_generator import ThesisGenerator
+
+    topic = data.get("topic", "Mavzusiz")
+    subject = data.get("subject_name") or data.get("subject", "")
+    language = data.get("language", "uz")
+    details = data.get("details", "")
+
+    student_name = data.get("student_name", "")
+    teacher_name = data.get("teacher_name", "")
+    teacher_rank = data.get("teacher_rank", "")
+    institution = data.get("university", "")
+    email = data.get("email", "")  # ixtiyoriy
+
+    progress_msg_id = _run(_send_progress_msg(
+        telegram_id,
+        _progress_text("Tezis", 5, f"Mavzu: <b>{topic[:60]}</b>", "1-2 daqiqa"),
+    ))
+
+    _update_task_status(task_uuid, "processing", 25)
+    if progress_msg_id:
+        _run(_edit_progress_msg(telegram_id, progress_msg_id,
+            _progress_text("Tezis", 25, "AI matn yozmoqda...", "1-2 daqiqa")))
+
+    # AI'ga tezis matnini yozdiramiz (qisqa, IMRaD)
+    content_data = _run(_generate_tezis_content(topic, subject, details, language))
+
+    _update_task_status(task_uuid, "processing", 70)
+    if progress_msg_id:
+        _run(_edit_progress_msg(telegram_id, progress_msg_id,
+            _progress_text("Tezis", 80, "DOCX hujjat yaratilmoqda...", "")))
+
+    # Authors blokini to'ldiramiz
+    authors = []
+    if student_name or teacher_name:
+        author_entry = {
+            'name': student_name or teacher_name,
+            'rank': teacher_rank,
+            'institution': institution,
+            'city': "Toshkent",
+            'country': "O'zbekiston",
+        }
+        authors.append({k: v for k, v in author_entry.items() if v})
+
+    thesis_doc_content = {
+        'title': content_data.get('title', topic),
+        'authors': authors,
+        'email': email,
+        'keywords': content_data.get('keywords', []),
+        'body': content_data.get('body', ''),
+        'references': content_data.get('references', []),
+    }
+
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+        path = f.name
+    try:
+        ok = ThesisGenerator().create_thesis(thesis_doc_content, path)
+        if not ok:
+            raise Exception("Tezis DOCX yaratilmadi")
+        with open(path, "rb") as f:
+            file_bytes = f.read()
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+
+    _update_task_status(task_uuid, "processing", 90)
+
+    from api.services import storage
+    r2_key = storage.upload_bytes(file_bytes, f"documents/{task_uuid}.docx")
+
+    new_balance = _get_user_balance(telegram_id)
+    caption = (
+        f"✅ <b>Tezis tayyor!</b>\n\n"
+        f"📋 Mavzu: {topic}\n"
+        f"💳 Balans: {new_balance:,.0f} so'm"
+    )
+    file_id = _run(_send_pptx_to_telegram(telegram_id, file_bytes, f"{topic[:30]}.docx", caption))
+
+    if progress_msg_id:
+        _run(_delete_progress_msg(telegram_id, progress_msg_id))
+
+    _update_task_status(task_uuid, "completed", 100, file_id=file_id, r2_key=r2_key)
+    logger.info(f"[Worker] Tezis task {task_uuid} completed ✓")
+
+
+async def _generate_tezis_content(topic: str, subject: str, details: str, language: str) -> dict:
+    """OpenAI orqali tezis matnini yozish (qisqa, IMRaD format)."""
+    from openai import AsyncOpenAI
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+    lang_label = {'uz': "O'zbek tilida", 'ru': "На русском", 'en': "In English"}.get(language, "O'zbek tilida")
+    subject_part = f"\nFan: {subject}" if subject else ""
+    details_part = f"\nQo'shimcha: {details}" if details else ""
+
+    prompt = f"""Sen ilmiy konferensiya tezisi yozish bo'yicha mutaxassissan.
+
+Mavzu: {topic}{subject_part}{details_part}
+Til: {lang_label}
+
+TEZIS TALABLARI:
+- Hajmi: 700-1200 so'z (1-2 bet)
+- IMRaD struktura: muammo qo'yilishi → mavjud yondashuvlar → muallif fikri → xulosa
+- Aniq, sodda, ilmiy uslub
+- Adabiyotlar matnda [1], [2] ko'rinishida iqtibos qilinadi
+- Kalit so'zlar: 5-7 ta
+
+Faqat JSON qaytar:
+{{
+  "title": "Tezis nomi (BOSH HARFLAR shart emas, generator UPPER qiladi)",
+  "keywords": ["so'z1", "so'z2", "so'z3", "so'z4", "so'z5"],
+  "body": "Asosiy matn... Bir necha paragraf, paragraflar orasi BO'SH QATOR bilan ajratilgan. Iqtiboslar [1], [2] ko'rinishida.",
+  "references": [
+    "Familiya I.O. Asar nomi. — Toshkent: Nashriyot, 2024. — 250 b.",
+    "Author A.B. Article title // Journal Name. — 2023. — Vol. 15, No. 3. — P. 45-52."
+  ]
+}}"""
+
+    resp = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"},
+        temperature=0.7,
+    )
+    return json.loads(resp.choices[0].message.content)
+
+
+# ─── KROSSVORD ────────────────────────────────────────────────────────────
+
+def _process_krossvord(task_uuid: str, telegram_id: int, data: dict, amount_charged: float):
+    """Krossvord — AI dan so'z+ta'rif olib, grid'ga joylab DOCX chiqaradi."""
+    import tempfile, os
+    from utils.crossword_generator import generate_crossword
+
+    topic = data.get("topic", "Mavzusiz")
+    language = data.get("language", "uz")
+    word_count = int(data.get("word_count") or data.get("page_count") or 18)
+    word_count = max(10, min(30, word_count))
+
+    progress_msg_id = _run(_send_progress_msg(
+        telegram_id,
+        _progress_text("Krossvord", 5, f"Mavzu: <b>{topic[:60]}</b>\n🔤 ~{word_count} ta so'z", "1-2 daqiqa"),
+    ))
+
+    _update_task_status(task_uuid, "processing", 30)
+    if progress_msg_id:
+        _run(_edit_progress_msg(telegram_id, progress_msg_id,
+            _progress_text("Krossvord", 30, "AI so'z va savollar tayyorlamoqda...", "1-2 daqiqa")))
+
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+        path = f.name
+    try:
+        ok = _run(generate_crossword(topic, settings.openai_api_key, path, word_count, language))
+        if not ok:
+            raise Exception("Krossvord yaratilmadi (so'zlarni joylashtirib bo'lmadi)")
+
+        if progress_msg_id:
+            _run(_edit_progress_msg(telegram_id, progress_msg_id,
+                _progress_text("Krossvord", 90, "DOCX hujjat tayyorlanmoqda...", "")))
+
+        with open(path, "rb") as f:
+            file_bytes = f.read()
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+
+    from api.services import storage
+    r2_key = storage.upload_bytes(file_bytes, f"documents/{task_uuid}.docx")
+
+    new_balance = _get_user_balance(telegram_id)
+    caption = (
+        f"✅ <b>Krossvord tayyor!</b>\n\n"
+        f"🔤 Mavzu: {topic}\n"
+        f"📋 1-bet: krossvord\n"
+        f"📋 2-bet: savollar\n"
+        f"📋 3-bet: javoblar\n"
+        f"💳 Balans: {new_balance:,.0f} so'm"
+    )
+    file_id = _run(_send_pptx_to_telegram(telegram_id, file_bytes, f"krossvord_{topic[:25]}.docx", caption))
+
+    if progress_msg_id:
+        _run(_delete_progress_msg(telegram_id, progress_msg_id))
+
+    _update_task_status(task_uuid, "completed", 100, file_id=file_id, r2_key=r2_key)
+    logger.info(f"[Worker] Krossvord task {task_uuid} completed ✓")
 
 
 def _get_user_balance(telegram_id: int) -> float:
