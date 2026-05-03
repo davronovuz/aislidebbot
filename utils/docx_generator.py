@@ -96,8 +96,8 @@ class DocxGenerator:
 
             doc = Document()
 
-            # Sahifa sozlamalari (GOST)
-            self._setup_page(doc)
+            # Sahifa sozlamalari (GOST + agar kurs ishi/diplom bo'lsa — sahifa ramkasi)
+            self._setup_page(doc, work_type)
 
             # Stillar sozlash
             self._setup_styles(doc)
@@ -149,13 +149,40 @@ class DocxGenerator:
     # Sahifa va stil sozlamalari
     # ──────────────────────────────────────────────
 
-    def _setup_page(self, doc: Document):
-        """Sahifa o'lchamlari va marginlarni sozlash (GOST)"""
+    # Page borders qo'yiladigan ish turlari (rasmiy hujjatlar)
+    BORDERED_WORK_TYPES = {
+        'kurs_ishi', 'diplom_ishi', 'bitiruv_malakaviy_ishi',
+        'magistr_dissertatsiyasi', 'magistr_diss',
+    }
+
+    def _setup_page(self, doc: Document, work_type: str = ''):
+        """Sahifa o'lchamlari va marginlarni sozlash (GOST).
+        Agar work_type rasmiy hujjat bo'lsa — sahifa atrofiga ramka qo'yiladi.
+        """
         section = doc.sections[0]
         section.left_margin = self.LEFT_MARGIN
         section.right_margin = self.RIGHT_MARGIN
         section.top_margin = self.TOP_MARGIN
         section.bottom_margin = self.BOTTOM_MARGIN
+
+        if work_type in self.BORDERED_WORK_TYPES:
+            self._add_page_borders(section)
+
+    def _add_page_borders(self, section):
+        """Section'ga sahifa atrofidagi ramka qo'shish (kurs ishi/diplom standarti)."""
+        sectPr = section._sectPr
+        # Eski pgBorders bo'lsa olib tashlash (idempotent)
+        for old in sectPr.findall(qn('w:pgBorders')):
+            sectPr.remove(old)
+        pg_borders = parse_xml(
+            f'<w:pgBorders {nsdecls("w")} w:offsetFrom="page" w:display="allPages">'
+            f'<w:top w:val="single" w:sz="12" w:space="24" w:color="000000"/>'
+            f'<w:left w:val="single" w:sz="12" w:space="24" w:color="000000"/>'
+            f'<w:bottom w:val="single" w:sz="12" w:space="24" w:color="000000"/>'
+            f'<w:right w:val="single" w:sz="12" w:space="24" w:color="000000"/>'
+            f'</w:pgBorders>'
+        )
+        sectPr.append(pg_borders)
 
     def _setup_styles(self, doc: Document):
         """Hujjat stillarini sozlash"""
@@ -459,16 +486,125 @@ class DocxGenerator:
         run.font.name = self.FONT_NAME
 
     def _add_title_page(self, doc: Document, content: Dict, work_type: str):
+        """Titul sahifa — ish turi bo'yicha tegishli shablon tanlanadi."""
+        if work_type in self.BORDERED_WORK_TYPES:
+            self._add_official_title_page(doc, content, work_type)
+        else:
+            self._add_simple_title_page(doc, content, work_type)
+
+    def _add_official_title_page(self, doc: Document, content: Dict, work_type: str):
         """
-        Professional titul sahifa.
-        O'zbekiston universitetlari GOST standarti bo'yicha.
+        Rasmiy titul sahifa — kurs ishi va diplom uchun (O'zbekiston standarti).
+        Sahifa atrofida ramka, ulkan ish turi nomi (44pt), markazlashgan.
+        Foydalanuvchi yuborgan namuna asosida.
         """
         author_info = content.get('author_info', {})
         subject = content.get('subject', '')
+        title = content.get('title', 'MAVZU')
 
-        # ─── YUQORI QISM: Vazirlk + Universitet + Fakultet ───
+        # ─── YUQORI: Vazirlik (rasmda 2 qator alohida)
+        self._add_centered_line(doc, "O'ZBEKISTON RESPUBLIKASI",
+            size=13, bold=True, space_after=4)
+        self._add_centered_line(doc,
+            "OLIY TA'LIM, FAN VA INNOVATSIYALAR VAZIRLIGI",
+            size=13, bold=True, space_after=10)
 
-        # Vazirlik (14pt bold — kattaroq, aniq ko'rinadi)
+        # Universitet (ostiga chiziq)
+        institution = author_info.get('institution', '')
+        self._add_centered_with_underline(doc, institution.upper() if institution else '',
+            size=12, bold=True)
+
+        # Fakultet (ostiga chiziq)
+        faculty = author_info.get('faculty', '')
+        self._add_centered_with_underline(doc,
+            f"{faculty} fakulteti" if faculty else '', size=12)
+
+        # Kafedra
+        department = author_info.get('department', '')
+        if department:
+            self._add_centered_with_underline(doc, department, size=12)
+        elif subject:
+            self._add_centered_with_underline(doc, f'"{subject}" kafedrasi', size=12)
+
+        # Kurs / guruh (rasmdagi __-KURS ___-GURUH TALABASI)
+        student_group = author_info.get('student_group', '')
+        course_text = (f"{student_group} guruh talabasi" if student_group
+                       else "____ kurs ____ guruh talabasi")
+        self._add_centered_line(doc, course_text, size=12, space_after=8)
+
+        # Talaba ismi NING (rasmdagi pattern)
+        student = author_info.get('student_name', '')
+        if student:
+            self._add_centered_with_underline(doc, student.upper(), size=13, bold=True, suffix=' NING')
+        else:
+            self._add_centered_with_underline(doc, '', size=13, bold=True, suffix=' NING')
+
+        self._add_empty_lines(doc, 1)
+
+        # Mavzu: "_____ mavzusidagi"
+        self._add_centered_with_underline(doc, title, size=12)
+        self._add_centered_line(doc, "mavzusidagi", size=12, space_after=12)
+
+        # ─── ASOSIY: ULKAN ISH TURI (rasmda 50pt+ ko'rinadi)
+        work_label = WORK_TYPE_LABELS.get(work_type, 'KURS ISHI')
+        self._add_centered_line(doc, work_label, size=44, bold=True, space_after=4)
+
+        # ─── PASTKI: rahbar (ixtiyoriy)
+        self._add_empty_lines(doc, 6)
+
+        teacher = author_info.get('teacher_name', '')
+        teacher_rank = author_info.get('teacher_rank', '')
+        if teacher:
+            value = f'{teacher_rank} {teacher}' if teacher_rank else teacher
+            self._add_right_line(doc, 'Ilmiy rahbar:', value, size=12)
+
+        # Pastda Toshkent – yil
+        self._add_empty_lines(doc, 4)
+        self._add_centered_line(doc,
+            f"Toshkent {chr(0x2013)} {datetime.now().year}",
+            size=13, bold=True)
+
+        doc.add_page_break()
+
+    def _add_centered_with_underline(self, doc: Document, text: str, size: int = 12,
+                                      bold: bool = False, suffix: str = ''):
+        """
+        Markazlashgan matn + ostida chiziq (rasmdagi pattern).
+        Agar matn bo'sh bo'lsa, faqat chiziq chiqadi (qo'lda to'ldirish uchun).
+        """
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.first_line_indent = Cm(0)
+        p.paragraph_format.space_after = Pt(4)
+        p.paragraph_format.space_before = Pt(2)
+        p.paragraph_format.line_spacing = 1.2
+
+        if text:
+            run = p.add_run(text)
+            run.bold = bold
+            run.font.size = Pt(size)
+            run.font.name = self.FONT_NAME
+            run.underline = True
+        else:
+            run = p.add_run('_' * 60)
+            run.font.size = Pt(size)
+            run.font.name = self.FONT_NAME
+
+        if suffix:
+            run2 = p.add_run(suffix)
+            run2.bold = bold
+            run2.font.size = Pt(size)
+            run2.font.name = self.FONT_NAME
+
+    def _add_simple_title_page(self, doc: Document, content: Dict, work_type: str):
+        """
+        Sodda titul — mustaqil ish, referat va h.k. (ramkasiz, kompakt).
+        """
+        author_info = content.get('author_info', {})
+        subject = content.get('subject', '')
+        title = content.get('title', 'MAVZU')
+
+        # YUQORI: Vazirlik (14pt bold)
         self._add_centered_line(doc,
             "O'ZBEKISTON RESPUBLIKASI OLIY TA'LIM, FAN VA INNOVATSIYALAR VAZIRLIGI",
             size=14, bold=True, space_after=8)
