@@ -417,60 +417,78 @@ class CrosswordAIGenerator:
         from openai import AsyncOpenAI
         self.client = AsyncOpenAI(api_key=openai_key)
 
-    async def generate_words(self, topic: str, count: int = 18, language: str = 'uz') -> List[Dict]:
+    async def generate_words(self, topic: str, count: int = 18, language: str = 'uz',
+                              attempt: int = 1) -> List[Dict]:
         """
         Qaytaradi: [{'word': 'PYTHON', 'clue': 'Mashhur dasturlash tili'}, ...]
-        AI dan JSON oladi va parse qiladi.
+        AI dan JSON oladi, tozalaydi, kam bo'lsa qayta so'raydi (max 2 marta).
         """
         lang_label = {
-            'uz': "O'zbek tilida",
-            'ru': 'На русском языке',
-            'en': 'In English',
-        }.get(language, "O'zbek tilida")
+            'uz': "lotin alifbosida o'zbek tilida (APOSTROFSIZ! 'so'z' o'rniga 'soz', 'o'qituvchi' o'rniga 'oqituvchi')",
+            'ru': 'на русском языке (только кириллица или латиница, без апострофов)',
+            'en': 'In English (Latin alphabet only, no apostrophes)',
+        }.get(language, "o'zbek tilida apostrofsiz")
+
+        # Ko'p so'z so'rash — AI ba'zilarini noto'g'ri qaytarsa ham yetishi uchun
+        ask_count = max(count + 8, 25)
 
         prompt = f"""Sen krossvord uchun so'z va ta'rif tayyorlovchi yordamchisan.
 
 Mavzu: "{topic}"
-Til: {lang_label}
 
-Vazifa: shu mavzu bo'yicha {count} ta so'z va ularning ta'riflarini (clue) yarat.
+Vazifa: shu mavzu bo'yicha aniq {ask_count} ta so'z va ularning ta'riflarini (clue) yarat.
 
-QATTIQ TALABLAR:
-1. Har so'z faqat HARFLAR (raqam, probel, defis, apostrof YO'Q)
-2. So'z uzunligi: 4 dan 12 gacha harf
-3. So'zlar BIR-BIRIDAN FARQLI bo'lishi shart
-4. Ta'rif (clue) qisqa, aniq, 1 ta gap (10-15 so'zdan oshmasin)
-5. Ta'rif so'zning o'zini ishlatmasligi kerak
-6. Faqat JSON qaytar, boshqa matn yo'q
+⚠️ KRITIK TALABLAR (qattiq rioya qiling):
+1. Har so'z FAQAT lotin alifbosi (A-Z) — RAQAM, PROBEL, DEFIS, APOSTROF, '"', "'" YO'Q
+2. APOSTROFLI so'zlarni QO'SHMA harflar bilan ALMASHTIRING:
+   - "o'qituvchi" → "OQITUVCHI"
+   - "ko'cha" → "KOCHA"
+   - "g'oz" → "GOZ"
+   - "ish'or" → "ISHOR"
+3. So'z uzunligi: 4 dan 11 gacha harf (KESKIN)
+4. Hammasi BIR-BIRIDAN FARQLI bo'lishi shart
+5. Ta'rif (clue) — qisqa, aniq, 1 gap (5-12 so'z), {lang_label}
+6. Ta'rif so'zning o'zini ishlatmasligi kerak (tarjima qilib boshqacha aytish)
+7. Faqat JSON qaytar, boshqa hech narsa yozma
 
-JSON formati:
+JSON formati (aynan shu, shu xil):
 {{
   "words": [
-    {{"word": "PYTHON", "clue": "Mashhur dasturlash tili"}},
-    {{"word": "ALGORITM", "clue": "Muammoni hal qilish bosqichlari ketma-ketligi"}}
+    {{"word": "OQITUVCHI", "clue": "Maktabda dars beruvchi shaxs"}},
+    {{"word": "MAKTAB", "clue": "Bilim olish joyi"}}
   ]
 }}"""
+
+        if attempt > 1:
+            prompt += f"\n\n⚠️ AVVALGI URINISHDA so'zlarning ko'pi noto'g'ri formatda edi (apostrof, juda qisqa yoki uzun). Bu safar HAR BIR so'z qoidalarga to'liq mos kelishi shart!"
 
         response = await self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
-            temperature=0.7,
+            temperature=0.6 if attempt == 1 else 0.4,
         )
 
         raw = response.choices[0].message.content
-        data = json.loads(raw)
+        try:
+            data = json.loads(raw)
+        except Exception as e:
+            logger.warning(f"Krossvord JSON parse xato (attempt {attempt}): {e}")
+            data = {"words": []}
         words = data.get("words", [])
 
-        # Tozalash + validatsiya
+        # Tozalash + validatsiya — har bir so'zni "saqlashga" urinamiz
         cleaned = []
         seen = set()
         for w in words:
-            word = re.sub(r'[^A-Za-zА-Яа-яЁёО\'’ʻЀ-ӿ]', '', str(w.get('word', ''))).upper()
-            # Apostroflarni olib tashlash (krossvord harflari uchun)
-            word = re.sub(r"['ʻ’]", '', word)
+            raw_word = str(w.get('word', '')).strip()
+            # 1) Apostrof + tirelarni butunlay olib tashlash
+            raw_word = re.sub(r"[’ʻʼˈ'`´\-\s]+", '', raw_word)
+            # 2) FAQAT alifbo harflarini saqlash (lotin va kirill)
+            word = re.sub(r'[^A-Za-zЀ-ӿ]', '', raw_word).upper()
             clue = str(w.get('clue', '')).strip()
-            if not (4 <= len(word) <= 12):
+            # Validatsiya
+            if not (4 <= len(word) <= 11):
                 continue
             if word in seen:
                 continue
@@ -478,6 +496,18 @@ JSON formati:
                 continue
             seen.add(word)
             cleaned.append({'word': word, 'clue': clue})
+
+        logger.info(f"Krossvord AI [{attempt}-attempt]: {len(words)} ta so'z keldi, {len(cleaned)} ta tozalashdan o'tdi")
+
+        # Agar kam bo'lsa va birinchi urinish bo'lsa, qayta so'raymiz
+        if len(cleaned) < max(8, count - 5) and attempt < 2:
+            logger.info(f"Krossvord uchun qayta so'rov (attempt 2)")
+            extra = await self.generate_words(topic, count, language, attempt=2)
+            # Birlashtirish (dublikatsiz)
+            for entry in extra:
+                if entry['word'] not in seen:
+                    cleaned.append(entry)
+                    seen.add(entry['word'])
 
         return cleaned
 
@@ -491,8 +521,11 @@ async def generate_crossword(topic: str, openai_key: str, output_path: str,
     """End-to-end krossvord yaratish."""
     ai = CrosswordAIGenerator(openai_key)
     words_with_clues = await ai.generate_words(topic, word_count, language)
-    if len(words_with_clues) < 8:
-        logger.error(f"Krossvord uchun so'zlar yetarli emas: {len(words_with_clues)}")
+    if len(words_with_clues) < 5:
+        logger.error(
+            f"Krossvord uchun so'zlar yetarli emas: faqat {len(words_with_clues)} ta. "
+            f"Mavzu juda tor yoki abstrakt bo'lishi mumkin: '{topic}'"
+        )
         return False
 
     # Eng uzunidan qisqaga tartiblash (uzun so'z dastlab markazga, kichkina keyinroq joylanadi)
@@ -509,7 +542,7 @@ async def generate_crossword(topic: str, openai_key: str, output_path: str,
 
     logger.info(f"Krossvord: {placed_count}/{len(words_with_clues)} so'z joylashtirildi. Skip: {skipped}")
 
-    if placed_count < 6:
+    if placed_count < 5:
         logger.error("Juda kam so'z joylashtirildi, krossvord yaratilmadi")
         return False
 
