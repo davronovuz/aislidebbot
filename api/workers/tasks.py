@@ -417,7 +417,9 @@ def _process_tezis(task_uuid: str, telegram_id: int, data: dict, amount_charged:
         'title': content_data.get('title', topic),
         'authors': authors,
         'email': email,
+        'annotation': content_data.get('annotation', ''),
         'keywords': content_data.get('keywords', []),
+        'sections': content_data.get('sections', []),
         'body': content_data.get('body', ''),
         'references': content_data.get('references', []),
     }
@@ -455,74 +457,174 @@ def _process_tezis(task_uuid: str, telegram_id: int, data: dict, amount_charged:
 
 
 async def _generate_tezis_content(topic: str, subject: str, details: str, language: str) -> dict:
-    """OpenAI orqali tezis matnini yozish (qisqa, IMRaD format).
-    Agar JSON parse xato bo'lsa yoki bo'limlar yetishmasa, sodda fallback."""
+    """OpenAI orqali tezis matnini yozish (sifatli, kengaytirilgan, IMRaD struktura).
+
+    Output:
+        title: Tezis nomi
+        annotation: 100-150 so'z annotatsiya
+        keywords: 5-7 ta kalit so'z
+        sections: [{'heading': 'KIRISH', 'content': '...'}, ...]
+        references: 6-10 ta GOST formatdagi adabiyot
+    """
     from openai import AsyncOpenAI
     client = AsyncOpenAI(api_key=settings.openai_api_key)
 
-    lang_label = {'uz': "O'zbek tilida", 'ru': "На русском", 'en': "In English"}.get(language, "O'zbek tilida")
-    subject_part = f"\nFan: {subject}" if subject else ""
-    details_part = f"\nQo'shimcha: {details}" if details else ""
+    lang_label = {
+        'uz': "o'zbek tilida (lotin alifbosi, ilmiy uslub)",
+        'ru': "на русском языке (научный стиль)",
+        'en': "in English (scientific style)",
+    }.get(language, "o'zbek tilida")
 
-    prompt = f"""Sen ilmiy konferensiya tezisi yozish bo'yicha mutaxassissan.
+    subject_part = f"\nFan/soha: {subject}" if subject else ""
+    details_part = f"\nQo'shimcha talab: {details}" if details else ""
 
-Mavzu: {topic}{subject_part}{details_part}
-Til: {lang_label}
+    prompt = f"""Sen ilmiy konferensiya tezislari yozish bo'yicha tajribali mutaxassissan.
+PhD darajasidagi olimlar uchun namunaviy tezis yozasan.
 
-TEZIS TALABLARI:
-- Hajmi: 700-1200 so'z (1-2 bet)
-- IMRaD struktura: muammo qo'yilishi -> mavjud yondashuvlar -> muallif fikri -> xulosa
-- Aniq, sodda, ilmiy uslub
-- Adabiyotlar matnda [1], [2] ko'rinishida iqtibos qilinadi
-- Kalit so'zlar: 5-7 ta
+MAVZU: {topic}{subject_part}{details_part}
+TIL: {lang_label}
 
-Faqat JSON qaytar:
+⚠️ MAJBURIY TALABLAR (har biri rioya qilinishi shart):
+1. UMUMIY HAJM: 1500-2200 so'z (to'liq 2 bet)
+2. IMRaD STRUKTURA — 5 ta alohida bo'lim, har biri o'z heading bilan:
+   - KIRISH (250-350 so'z): mavzuning dolzarbligi, muammo qo'yilishi, maqsad
+   - TADQIQOT METODLARI VA MATERIALLAR (200-300 so'z): qanday usullar bilan tadqiqot
+   - NATIJALAR VA TAHLIL (500-700 so'z): asosiy topilmalar, statistika, qiyosiy tahlil
+   - MUHOKAMA (300-450 so'z): natijalar interpretatsiyasi, mavjud yondashuvlar bilan qiyos
+   - XULOSA (200-300 so'z): asosiy xulosalar (3-5 ta), keyingi tadqiqot yo'nalishlari
+3. ANNOTATSIYA: 100-150 so'z, mustaqil paragraf — ishning qisqacha mazmuni
+4. KALIT SO'ZLAR: 5-7 ta, vergul bilan ajratilgan
+5. ADABIYOTLAR: 6-10 ta manba, GOST 7.1-2003 formatida (kitob, maqola, internet aralash)
+6. IQTIBOSLAR: matnda [1], [2], [1, 3] ko'rinishida — har bo'limda kamida 2 ta iqtibos
+7. ILMIY USLUB: konkret raqamlar, foizlar, tahlil; "deyarli", "ko'pchilik", "ba'zilar" kabi noaniq so'zlardan saqlanish
+8. AYNAN shu mavzu bo'yicha — umumiy gaplar emas, mavzuga aniq oid kontentlar
+
+ADABIYOTLAR FORMATI NAMUNALARI:
+- Karimov A.B., Yusupov S.K. Zamonaviy ta'lim texnologiyalari. — Toshkent: Fan, 2024. — 248 b.
+- Smith J., Brown R. Machine Learning in Education // Educational Technology Research. — 2023. — Vol. 41, No. 3. — P. 567-589.
+- Jurayev I.K. Sun'iy intellekt va ta'lim sifati // Pedagogika. — 2024. — № 2. — B. 45-52.
+- World Bank. Education Technology Report 2023. — Washington: WB Publications, 2023. — 156 p.
+- UNESCO. Digital Learning Trends [Elektron resurs]. — URL: https://unesco.org/digital-learning (kirish: 15.03.2024).
+
+⚠️ TAYYOR JSON FORMAT (boshqa hech narsa yozma):
 {{
-  "title": "Tezis nomi (BOSH HARFLAR shart emas, generator UPPER qiladi)",
-  "keywords": ["soz1", "soz2", "soz3", "soz4", "soz5"],
-  "body": "Asosiy matn... Bir necha paragraf, paragraflar orasi BO'SH QATOR bilan ajratilgan. Iqtiboslar [1], [2] ko'rinishida.",
+  "title": "Tezisning aniq, batafsil nomi",
+  "annotation": "100-150 so'z annotatsiya. Ish maqsadi, metodikasi, asosiy natijalari va xulosalari qisqacha bayon etiladi. Bir mustaqil paragraf.",
+  "keywords": ["kalit_soz1", "kalit_soz2", "kalit_soz3", "kalit_soz4", "kalit_soz5", "kalit_soz6"],
+  "sections": [
+    {{
+      "heading": "KIRISH",
+      "content": "250-350 so'z. Mavzu dolzarbligi, muammo bayoni, maqsad. Iqtiboslar [1], [2]. Bir necha paragraf bo'lishi mumkin (paragraflar BO'SH QATOR bilan ajratilgan)."
+    }},
+    {{
+      "heading": "TADQIQOT METODLARI VA MATERIALLAR",
+      "content": "200-300 so'z. Qanday usullar bilan tadqiqot olib borilgan. Iqtiboslar [3]."
+    }},
+    {{
+      "heading": "NATIJALAR VA TAHLIL",
+      "content": "500-700 so'z. Asosiy topilmalar, raqamlar, foizlar, qiyosiy tahlil. Iqtiboslar [4], [5]."
+    }},
+    {{
+      "heading": "MUHOKAMA",
+      "content": "300-450 so'z. Natijalar interpretatsiyasi, mavjud yondashuvlar bilan qiyos. Iqtibos [6]."
+    }},
+    {{
+      "heading": "XULOSA",
+      "content": "200-300 so'z. 3-5 ta aniq xulosa. Keyingi tadqiqot yo'nalishlari."
+    }}
+  ],
   "references": [
-    "Familiya I.O. Asar nomi. — Toshkent: Nashriyot, 2024. — 250 b.",
-    "Author A.B. Article title // Journal Name. — 2023. — Vol. 15, No. 3. — P. 45-52."
+    "1. Familiya A.B. Kitob nomi. — Toshkent: Nashriyot, 2024. — 250 b.",
+    "2. Author X.Y. Article title // Journal. — 2023. — Vol. 5. — P. 12-25.",
+    "..."
   ]
 }}"""
 
+    data = {}
     try:
         resp = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.7,
+            max_tokens=4000,
         )
         data = json.loads(resp.choices[0].message.content)
     except Exception as e:
         logger.error(f"Tezis AI/JSON xato: {e}")
-        data = {}
 
-    # Fallback — qiymat bo'lmasa, default
-    body = (data.get("body") or "").strip()
-    if not body or len(body) < 200:
-        # Fallback minimal tezis matn
-        body = (
-            f"{topic} mavzusi hozirgi kunda dolzarb masalalardan biri hisoblanadi. "
-            f"Ushbu yo'nalishda olib borilgan tadqiqotlar muhim natijalar bermoqda [1].\n\n"
-            f"Mavjud yondashuvlar tahlili shuni ko'rsatadiki, mavzu turli aspektlardan "
-            f"o'rganilgan, ammo ko'plab masalalar hali ham muhokama talab qiladi.\n\n"
-            f"Ushbu tezisda muammoning yangi yondashuvlari taklif qilinadi va ularning "
-            f"amaliy ahamiyati muhokama qilinadi [2].\n\n"
-            f"Xulosa qilib aytganda, {topic.lower()} bo'yicha keyingi tadqiqotlar zarur "
-            f"va tavsiya etiladi."
-        )
+    # Validatsiya — agar AI bo'limlarni bermagan bo'lsa, fallback
+    sections = data.get("sections") or []
+    if not sections or len(sections) < 3:
+        logger.warning("Tezis: AI sections berdmadi, fallback ishlatilmoqda")
+        sections = _build_tezis_fallback_sections(topic)
+
+    # Body uchun sections'ni birlashtirish (eski "body" maydoni bilan moslik uchun)
+    body_parts = []
+    for sec in sections:
+        heading = (sec.get("heading") or "").strip()
+        content = (sec.get("content") or "").strip()
+        if heading:
+            body_parts.append(f"## {heading}\n\n{content}")
+        else:
+            body_parts.append(content)
+    combined_body = "\n\n".join(body_parts)
+
+    references = data.get("references") or [
+        "1. Karimov A.B. Zamonaviy ilmiy tadqiqotlar metodologiyasi. — Toshkent: Fan, 2024. — 256 b.",
+        "2. Smith J., Doe A. Modern Research Approaches // Scientific Journal. — 2023. — Vol. 18, No. 4. — P. 234-251.",
+        "3. Jurayev I.K. Innovatsion tadqiqot usullari // Ilm-fan. — 2024. — № 3. — B. 67-78.",
+    ]
 
     return {
         "title": data.get("title") or topic,
-        "keywords": data.get("keywords") or [topic.split()[0] if topic.split() else "tadqiqot"],
-        "body": body,
-        "references": data.get("references") or [
-            f"Karimov A.B. Zamonaviy tadqiqotlar. — Toshkent: Fan, 2024. — 200 b.",
-            f"Smith J. Modern Approaches // Research Journal. — 2023. — Vol. 12. — P. 15-28.",
+        "annotation": data.get("annotation") or "",
+        "keywords": data.get("keywords") or [
+            topic.split()[0] if topic.split() else "tadqiqot",
+            "tahlil", "natija", "metodika", "ilmiy ish",
         ],
+        "sections": sections,
+        "body": combined_body,  # legacy field
+        "references": references,
     }
+
+
+def _build_tezis_fallback_sections(topic: str) -> list:
+    """AI ishlamagan holda minimal tezis bo'limlari (fallback)."""
+    return [
+        {
+            "heading": "KIRISH",
+            "content": (
+                f"{topic} mavzusi hozirgi kunda dolzarb va keng o'rganilayotgan masalalardan biri hisoblanadi. "
+                f"Mazkur sohada olib borilayotgan tadqiqotlar nazariy va amaliy ahamiyatga ega [1].\n\n"
+                f"Tadqiqot maqsadi — {topic.lower()} sohasidagi mavjud yondashuvlarni tahlil qilish va yangi "
+                f"tavsiyalar ishlab chiqishdan iborat. Bu tezisda muammoning asosiy jihatlari ko'rib chiqiladi."
+            ),
+        },
+        {
+            "heading": "TADQIQOT METODLARI",
+            "content": (
+                "Tadqiqot davomida qiyosiy tahlil, sintez, induksiya va deduksiya kabi umumiy ilmiy "
+                "metodlardan foydalanildi. Maxsus metodlar sifatida adabiyot tahlili va statistik usullar qo'llanildi [2]."
+            ),
+        },
+        {
+            "heading": "NATIJALAR VA TAHLIL",
+            "content": (
+                f"Olib borilgan tahlil natijalari shuni ko'rsatdiki, {topic.lower()} sohasida bir qator "
+                f"muhim yo'nalishlar mavjud bo'lib, ular keyingi tadqiqotlar uchun asos bo'lib xizmat qiladi.\n\n"
+                f"Tahlil shuningdek, mavzuning amaliy ahamiyati va dolzarbligi haqida xulosa chiqarish imkonini berdi [3]."
+            ),
+        },
+        {
+            "heading": "XULOSA",
+            "content": (
+                f"Tezis natijalari asosida quyidagi xulosalar shakllantirildi: birinchidan, {topic.lower()} "
+                f"bo'yicha tadqiqotlar zaruriyat tug'dirmoqda; ikkinchidan, mavjud yondashuvlar takomillashtirish talab qiladi; "
+                f"uchinchidan, kelajakda yangi metodologik yondashuvlar ishlab chiqish maqsadga muvofiq."
+            ),
+        },
+    ]
 
 
 # ─── KROSSVORD ────────────────────────────────────────────────────────────

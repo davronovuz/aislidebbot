@@ -50,10 +50,11 @@ class ThesisGenerator:
             title:        ma'ruza nomi
             authors:      [{'name': '...', 'rank': 'PhD', 'institution': '...', 'city': 'Toshkent', 'country': "O'zbekiston"}]
             email:        muallif emaili
-            sections:     [{'heading': 'Kirish', 'content': '...'}, ...]  # ixtiyoriy bo'limlar
-            body:         oddiy paragraf matni (sections o'rniga ham ishlatish mumkin)
+            annotation:   100-150 so'z annotatsiya (ixtiyoriy)
+            keywords:     ['so'z1', 'so'z2', ...]
+            sections:     [{'heading': 'KIRISH', 'content': '...'}, ...]  # asosiy struktura
+            body:         legacy — sections bo'lmasa ishlatiladi
             references:   ['1. ...', '2. ...']
-            keywords:     ['so'z1', 'so'z2', ...]  # ixtiyoriy
         """
         try:
             doc = Document()
@@ -67,11 +68,16 @@ class ThesisGenerator:
             if email:
                 self._add_email(doc, email)
 
-            self._add_empty_paragraph(doc)
+            # Annotatsiya (sarlavha + matn)
+            annotation = (content.get('annotation') or '').strip()
+            if annotation:
+                self._add_annotation(doc, annotation)
 
             keywords = content.get('keywords', [])
             if keywords:
                 self._add_keywords(doc, keywords)
+
+            self._add_empty_paragraph(doc)
 
             sections = content.get('sections', [])
             if sections:
@@ -82,7 +88,8 @@ class ThesisGenerator:
                         self._add_section_heading(doc, heading)
                     self._add_body_text(doc, text)
             else:
-                self._add_body_text(doc, content.get('body', ''))
+                # Legacy fallback: body ichida `## HEADING` markdown bo'lsa ham parse qiladi
+                self._add_body_with_markdown_headings(doc, content.get('body', ''))
 
             references = content.get('references', [])
             if references:
@@ -95,6 +102,48 @@ class ThesisGenerator:
         except Exception as e:
             logger.error(f"Tezis DOCX yaratishda xato: {e}", exc_info=True)
             return False
+
+    def _add_annotation(self, doc: Document, text: str):
+        """Annotatsiya — sarlavha + bir paragraf matn (kalit so'zlardan oldin)."""
+        # Sarlavha
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.first_line_indent = Cm(0)
+        p.paragraph_format.space_before = Pt(6)
+        p.paragraph_format.space_after = Pt(2)
+        run = p.add_run("Annotatsiya")
+        run.bold = True
+        run.italic = True
+        run.font.size = Pt(12)
+        run.font.name = self.FONT_NAME
+
+        # Matn
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p.paragraph_format.first_line_indent = Cm(1)
+        p.paragraph_format.line_spacing = 1.0
+        p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
+        p.paragraph_format.space_after = Pt(4)
+        self._add_runs_with_bold(p, text)
+
+    def _add_body_with_markdown_headings(self, doc: Document, text: str):
+        """Body matnda `## HEADING` markdown bo'lsa parse qilib heading'larga ajratadi."""
+        if not text:
+            return
+        lines = text.split('\n')
+        buffer = []
+        for line in lines:
+            if line.strip().startswith('## '):
+                # Avvalgi bufer matnni chiqarish
+                if buffer:
+                    self._add_body_text(doc, '\n'.join(buffer))
+                    buffer = []
+                heading = line.strip()[3:].strip()
+                self._add_section_heading(doc, heading)
+            else:
+                buffer.append(line)
+        if buffer:
+            self._add_body_text(doc, '\n'.join(buffer))
 
     def _setup_page(self, doc: Document):
         section = doc.sections[0]
